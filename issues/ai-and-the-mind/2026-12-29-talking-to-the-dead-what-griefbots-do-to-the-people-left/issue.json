@@ -1,0 +1,249 @@
+{
+  "title": "Talking to the dead: what griefbots do to the people left behind",
+  "subtitle": "AI can now speak in the voice of someone you lost. The research is early, and it points both ways.",
+  "topic": "Grief tech: AI recreations of people who have died",
+  "cover_highlight": "Talking to the dead",
+  "cover_photo_query": "candle burning in dark",
+  "markdown": "The holidays are when absence is loudest. An empty chair, a recipe no one else knows, a voice you would give anything to hear again. Now there are companies offering exactly that: an AI trained on someone's messages, voice notes and photos, that talks back in their style after they're gone.\n\n[[VISUAL:v1]]\n\nThey go by many names: griefbots, deadbots, postmortem avatars. Researchers at Google DeepMind call them \"generative ghosts\" ([Morris & Brubaker, 2024](https://arxiv.org/abs/2402.01662)), because unlike an old voicemail, they say new things. This week: what we know about how they affect grief, and what we don't.\n\n## The short answer\n\nHonestly, we don't know much yet. The research is early, small and mostly based on interviews. For some people, talking to a simulation of someone they lost offers comfort, privacy and a chance to say what went unsaid. But the same studies raise real worries: memories that blur with things the AI invented, dependence, and serious questions about consent and who controls the dead person's data. If you're considering one, go slowly and keep people around you.\n\n## Grief is already hard to get through\n\nMost people who lose someone grieve intensely and then, slowly, adapt. But a meaningful minority get stuck. A meta-analysis of 14 studies found that about one in ten bereaved adults is at risk of prolonged grief disorder, where intense longing and distress don't ease over time ([Lundorff et al., 2017](https://doi.org/10.1016/j.jad.2017.01.030)).\n\n[[VISUAL:v2]]\n\nThat's the group griefbots could help most, or harm most. And no one has yet run the long-term clinical studies needed to know which.\n\n## What people actually do with them\n\nOne of the first studies to ask mourners directly was presented at the CHI conference in 2023 ([Xygkou et al., 2023](https://doi.org/10.1145/3544548.3581154)). Researchers interviewed 10 people who used chatbots at different stages of their loss. They found seven ways chatbots helped people cope, including as a listener, a friend, an emotion coach, and as a simulation of the person who had died.\n\nA larger interview study of 26 deadbot users, published this year, looked closer at how people use these simulations ([Li & Lan, 2026](https://arxiv.org/abs/2603.01017)). Its most important finding is that users are not passive. They shape the bot as they go: choosing what to feed it, correcting it, and filling gaps with imagination.\n\n[[VISUAL:v3]]\n\nFor many, the bot became a private place to grieve. In the authors' words, deadbots \"provide a private space to grieve without social pressure and a channel to address unresolved emotions.\" The apology that never happened, the goodbye that was cut short, the question you never asked.\n\n[[VISUAL:v4]]\n\n## The memory problem\n\nThe same study found something that should give everyone pause. Over time, users' memories of the person changed. At first, the bot reinforced and idealised them. Later, things the AI had made up began to blend with real recollections.\n\n[[VISUAL:v5]]\n\nThat's a uniquely modern risk. Grief has always involved rewriting the story of someone we loved, but it's a story we write ourselves. A griefbot co-writes it, with words the person never said. The authors flag \"memory distortion and dependency\" and call for clinical research on the long-term effects.\n\n## The ethics nobody has settled\n\nResearchers at the University of Cambridge mapped the risks by imagining how these services could go wrong ([Hollanek & Nowaczyk-Basińska, 2024](https://doi.org/10.1007/s13347-024-00744-w)). They point out that every griefbot involves three different people, and their interests can clash:\n\n[[VISUAL:v6]]\n\nDid your father agree to become a chatbot? Does your sister want to receive messages from it? Who decides when it should stop? The Cambridge team's recommendations are sensible and modest: sensitive ways to \"retire\" a deadbot, honest transparency about what it is, adults only, and mutual consent from both the person being simulated and the people who interact with it.\n\n[[VISUAL:v7]]\n\n## So what's really going on?\n\n1. **The need is real.** Grief is common, painful, and for about one in ten adults, it gets stuck.\n2. **People find comfort,** especially a private space to say what went unsaid.\n3. **But the simulation shapes the memory,** and over time invented words can blur with real ones.\n4. **The evidence is thin.** Interview studies of 10 and 26 people are a start, not a verdict.\n5. **Consent and control are unresolved,** from whether the person agreed to how the bot is ended.\n\n## Who is most affected\n\n- **People with intense, prolonged grief,** who may find the most relief and the most risk of dependence.\n- **Children,** which is why researchers recommend these services be for adults only.\n- **Families who disagree,** when one member creates a griefbot that others never wanted.\n\n## What this means for you\n\n- **If you're thinking of trying one, set a purpose and a time limit.** \"I want to say goodbye\" is a healthier goal than \"I want them back.\"\n- **Keep real memories somewhere safe.** Save the actual messages and recordings separately, so you always know which words were truly theirs.\n- **Tell someone.** Let a friend, family member or counsellor know you're using it, and check in on how it's affecting you.\n- **Think about your own data.** If you'd hate to be turned into a chatbot, or would like to be, say so in writing, the way you would with other end-of-life wishes.\n- **If grief isn't easing after many months,** talk to a professional. Prolonged grief is treatable, and that help is better tested than any bot.\n\n## How we researched this\n\nI read the abstracts of the Philosophy & Technology paper, the CHI 2023 interview study, the 2026 arXiv interview study, Google DeepMind's \"generative ghosts\" paper, and the Journal of Affective Disorders meta-analysis on prolonged grief. Every figure here comes from those sources. Because the research is so new, almost none of it measures outcomes over time.\n\nBe gentle with yourself this holiday. Swagata\n\n## References\n\n1. Morris, M. R., & Brubaker, J. R. (2024). *Generative Ghosts: Anticipating Benefits and Risks of AI Afterlives.* arXiv:2402.01662. [Link](https://arxiv.org/abs/2402.01662)\n2. Lundorff, M., Holmgren, H., Zachariae, R., Farver-Vestergaard, I., & O'Connor, M. (2017). *Prevalence of prolonged grief disorder in adult bereavement: A systematic review and meta-analysis.* Journal of Affective Disorders. [Link](https://doi.org/10.1016/j.jad.2017.01.030)\n3. Xygkou, A., Siriaraya, P., Covaci, A., Prigerson, H. G., Neimeyer, R., Ang, C. S., et al. (2023). *The \"Conversation\" about Loss: Understanding How Chatbot Technology was Used in Supporting People in Grief.* CHI 2023. [Link](https://doi.org/10.1145/3544548.3581154)\n4. Li, Y., & Lan, X. (2026). *Remember You: Understanding How Users Use Deadbots to Reconstruct Memories of the Deceased.* arXiv:2603.01017. [Link](https://arxiv.org/abs/2603.01017)\n5. Hollanek, T., & Nowaczyk-Basińska, K. (2024). *Griefbots, Deadbots, Postmortem Avatars: on Responsible Applications of Generative AI in the Digital Afterlife Industry.* Philosophy & Technology. [Link](https://doi.org/10.1007/s13347-024-00744-w)\n",
+  "visuals": [
+    {
+      "id": "v1",
+      "kind": "photo",
+      "caption": "Old messages and letters are the raw material for every griefbot.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": "old family photographs box"
+    },
+    {
+      "id": "v2",
+      "kind": "waffle",
+      "caption": "Most grief eases with time; for about one in ten it doesn't.",
+      "source_url": "https://doi.org/10.1016/j.jad.2017.01.030",
+      "source_name": "Lundorff et al., Journal of Affective Disorders, 2017",
+      "chart_type": null,
+      "chart_title": "About one in ten bereaved adults is at risk of prolonged grief",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": 9.8,
+      "waffle_label": "of bereaved adults met criteria for prolonged grief disorder across 14 studies",
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v3",
+      "kind": "quote",
+      "caption": "Users actively shape the person they talk to.",
+      "source_url": "https://arxiv.org/abs/2603.01017",
+      "source_name": "Li & Lan, 2026",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": "users are not passive recipients but active constructors of the deceased's digital representation",
+      "quote_author": "Li & Lan, interviews with 26 deadbot users (2026)",
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v4",
+      "kind": "photo",
+      "caption": "For some, the bot is a private place to say what went unsaid.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": "woman looking out window alone"
+    },
+    {
+      "id": "v5",
+      "kind": "timeline",
+      "caption": "How memories of the deceased shifted over time in the 2026 interview study.",
+      "source_url": "https://arxiv.org/abs/2603.01017",
+      "source_name": "Li & Lan, 2026",
+      "chart_type": null,
+      "chart_title": "How a griefbot can reshape memory",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": [
+        {
+          "when": "Start",
+          "title": "Users build the bot",
+          "detail": "Choosing what to feed it, correcting it, filling gaps with imagination."
+        },
+        {
+          "when": "Early",
+          "title": "Memories reinforced and idealised",
+          "detail": "The digital figure blends real memories with personal expectations."
+        },
+        {
+          "when": "Later",
+          "title": "Invented words blur with real ones",
+          "detail": "AI-generated new memories mix with authentic recollections."
+        }
+      ],
+      "photo_query": null
+    },
+    {
+      "id": "v6",
+      "kind": "diagram",
+      "caption": "Every griefbot involves three different people, and their interests can clash.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "The three people in every griefbot",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": [
+        {
+          "id": "donor",
+          "label": "Data donor (the person who died)"
+        },
+        {
+          "id": "recipient",
+          "label": "Data recipient (holds their data)"
+        },
+        {
+          "id": "service",
+          "label": "Re-creation service"
+        },
+        {
+          "id": "bot",
+          "label": "The griefbot"
+        },
+        {
+          "id": "user",
+          "label": "Service interactant (who talks to it)"
+        }
+      ],
+      "edges": [
+        {
+          "source": "donor",
+          "target": "recipient",
+          "label": "messages, voice"
+        },
+        {
+          "source": "recipient",
+          "target": "service",
+          "label": "uploads"
+        },
+        {
+          "source": "service",
+          "target": "bot",
+          "label": "builds"
+        },
+        {
+          "source": "bot",
+          "target": "user",
+          "label": "talks to"
+        }
+      ],
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v7",
+      "kind": "stat",
+      "caption": "The Cambridge team's safeguards for any re-creation service.",
+      "source_url": "https://doi.org/10.1007/s13347-024-00744-w",
+      "source_name": "Hollanek & Nowaczyk-Basińska, Philosophy & Technology, 2024",
+      "chart_type": null,
+      "chart_title": "The safeguards researchers recommend",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": [
+        {
+          "value": "Retire",
+          "label": "sensitive procedures for ending a deadbot"
+        },
+        {
+          "value": "Adults",
+          "label": "only, with real transparency about what it is"
+        },
+        {
+          "value": "Consent",
+          "label": "from both the person simulated and those who talk to it"
+        }
+      ],
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    }
+  ]
+}

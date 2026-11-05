@@ -12,6 +12,7 @@ Generated automatically. Status: `local` = saved here only, `draft` = Substack d
 
 | Date | Title | Status |
 |---|---|---|
+| 2026-12-29 | [Talking to the dead: what griefbots do to the people left behind](ai-and-the-mind/2026-12-29-talking-to-the-dead-what-griefbots-do-to-the-people-left/issue.md) | local |
 | 2026-12-22 | [Growing up with AI: what it means for kids' minds](ai-and-the-mind/2026-12-22-growing-up-with-ai-what-it-means-for-kids-minds/issue.md) | local |
 | 2026-12-15 | [Your AI agrees with you too much. That's a problem](ai-and-the-mind/2026-12-15-your-ai-agrees-with-you-too-much-that-s-a-problem/issue.md) | local |
 | 2026-12-08 | [Can a chatbot be your therapist? What the trials say](ai-and-the-mind/2026-12-08-can-a-chatbot-be-your-therapist-what-the-trials-say/issue.md) | local |

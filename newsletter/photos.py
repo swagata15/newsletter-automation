@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterator
@@ -70,9 +71,13 @@ def _pixabay(query: str) -> Iterator[tuple[str, str, str]]:
 def _openverse(query: str) -> Iterator[tuple[str, str, str]]:
     words, seen = query.split(), set()
     for q in dict.fromkeys([" ".join(words), " ".join(words[:4]), " ".join(words[:2])]):  # broaden if needed
-        r = requests.get("https://api.openverse.org/v1/images/", headers=UA, params={
-            "q": q[:200], "license_type": "commercial,modification", "aspect_ratio": "wide",
-            "mature": "false", "page_size": 20}, timeout=25)
+        for attempt in range(4):  # Openverse occasionally answers 429/5xx under load: back off and retry
+            r = requests.get("https://api.openverse.org/v1/images/", headers=UA, params={
+                "q": q[:200], "license_type": "commercial,modification", "aspect_ratio": "wide",
+                "mature": "false", "page_size": 20}, timeout=25)
+            if r.status_code != 429 and r.status_code < 500:
+                break
+            time.sleep(5 * (attempt + 1))
         r.raise_for_status()
         for p in r.json().get("results", []):
             if (p.get("width") or 0) < 900 or p["url"] in seen:
