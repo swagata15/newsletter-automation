@@ -15,13 +15,15 @@ _HR = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 
 
-def _fix_prose(text: str) -> str:
+def _fix_prose(text: str, line_start: bool = True) -> str:
     text = re.sub(r"(?<=\d)\s*[–—]\s*(?=\d)", "-", text)       # 2020–2024 -> 2020-2024
-    text = re.sub(r"^\s*[—–]\s*", "", text)                    # leading dash
+    if line_start:  # a dash opening a line (e.g. an attribution) is simply dropped
+        text = re.sub(r"^\s*[—–]\s*", "", text)
     text = re.sub(r"\s*(?:[—–―‒]|(?<![-!<])--+(?![->]))\s*", ", ", text)
     text = re.sub(r",\s*([,.;:!?)])", r"\1", text)                       # tidy ", ." etc.
     text = re.sub(r"\(\s*,\s*", "(", text)
-    text = re.sub(r"^,\s*", "", text)
+    if line_start:  # only a comma at the very start of a line is an artifact; after a link it is real
+        text = re.sub(r"^,\s*", "", text)
     return text
 
 
@@ -39,7 +41,7 @@ def remove_dashes(markdown: str) -> str:
         m = re.match(r"^(\s*(?:[-*+]|\d+\.)\s+)?(.*)$", line)
         prefix, body = m.group(1) or "", m.group(2)
         parts = _PROTECTED.split(body)
-        body = "".join(p if i % 2 else _fix_prose(p) for i, p in enumerate(parts))
+        body = "".join(p if i % 2 else _fix_prose(p, line_start=(i == 0)) for i, p in enumerate(parts))
         out.append(prefix + body)
     return "\n".join(out)
 
