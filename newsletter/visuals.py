@@ -145,7 +145,7 @@ def _source_line(fig, t: Theme, name: str, url: str = "") -> None:
     fig.text(0.965, 0.2 / fh, sign, fontfamily=COND, fontweight="bold", fontsize=9, color=t.graphite, ha="right")
 
 
-def _pen_note(ax, t: Theme, text: str, target, dx=0.0, dy=0.0, rad=-0.3, text_pos=None):
+def _pen_note(ax, t: Theme, text: str, target, dx=0.0, dy=0.0, rad=-0.3, text_pos=None, ha="center"):
     """Handwritten red-pen margin note with a hand-drawn arrow to `target` (data coords).
 
     The note sits at an offset (dx, dy, in axes fractions) from the target, kept inside the plot."""
@@ -154,7 +154,7 @@ def _pen_note(ax, t: Theme, text: str, target, dx=0.0, dy=0.0, rad=-0.3, text_po
         text_pos = (min(max(tx + dx, 0.14), 0.86), min(max(ty + dy, 0.1), 0.92))
     ann = ax.annotate(
         textwrap.fill(text, 22), xy=target, xycoords="data", xytext=text_pos, textcoords="axes fraction",
-        fontfamily=HAND, fontweight="bold", fontsize=18, color=t.red_pen, ha="center", va="center",
+        fontfamily=HAND, fontweight="bold", fontsize=18, color=t.red_pen, ha=ha, va="center",
         linespacing=0.95, zorder=6, annotation_clip=False,
         arrowprops=dict(arrowstyle="-|>,head_length=0.6,head_width=0.3", color=t.red_pen, lw=1.8,
                         connectionstyle=f"arc3,rad={rad}", shrinkA=10, shrinkB=8),
@@ -259,7 +259,7 @@ def render_chart(v: Visual, path: Path, t: Theme) -> Path:
             for side in ("top", "right", "bottom"):
                 ax.spines[side].set_visible(False)
             ax.spines["left"].set_color(t.ink)
-            ax.margins(x=0.45 if v.annotation else 0.1, y=0.03)
+            ax.margins(x=0.75 if v.annotation else 0.1, y=0.03)
         else:
             ax.set_xticks(range(len(cats)), [textwrap.fill(c, max(14, 60 // len(cats))) for c in cats])
             ax.yaxis.set_visible(False)
@@ -284,8 +284,8 @@ def render_chart(v: Visual, path: Path, t: Theme) -> Path:
             disp = fig.transFigure.transform((lab.x1, (lab.y0 + lab.y1) / 2))
             tgt = tuple(ax.transData.inverted().transform(disp))
             ax_x, ax_y = ax.transAxes.inverted().transform(disp)
-            _pen_note(ax, t, v.annotation, tgt, rad=0.0,
-                      text_pos=(min(ax_x + 0.24, 0.84), min(max(ax_y, 0.08), 0.92)))
+            _pen_note(ax, t, v.annotation, tgt, rad=0.0, ha="left",
+                      text_pos=(ax_x + 0.07, min(max(ax_y, 0.08), 0.92)))
         elif kind == "line":
             _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.2, rad=0.3 * side)
         else:
