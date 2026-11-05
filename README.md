@@ -21,7 +21,7 @@ Three researched, illustrated issues a week, written by Claude and posted to you
    newsprint paper, grey-first data, a highlighter swipe on the key number, handwritten red-pen notes,
    a coloured tab per series, and duotone photos. Types: cover, big-number stat cards, charts with
    highlights and margin notes, 100-people pictograms, pull quotes, timelines, diagrams, real photos
-   (Pexels) and source preview images. Every number and quote in a graphic is checked against the
+   (Pixabay, Pexels or Openverse) and source preview images. Every number and quote in a graphic is checked against the
    research notes; anything that can't be traced is dropped automatically.
 5. **Post.** Images are uploaded to Substack and the issue is saved as a **draft** for you to review
    (or published directly if you choose).
@@ -56,7 +56,7 @@ Repo **Settings → Secrets and variables → Actions**, add these secrets:
 | `ANTHROPIC_API_KEY` | your Claude API key |
 | `SUBSTACK_PUBLICATION_URL` | `https://yourname.substack.com` |
 | `SUBSTACK_COOKIES` | `substack.sid=...` |
-| `PEXELS_API_KEY` | optional, for real photos ([free key](https://www.pexels.com/api/)) |
+| `PIXABAY_API_KEY` | optional, stock photos ([free key](https://pixabay.com/api/docs/)); without any photo key, Creative Commons photos come from Openverse with no key |
 
 Optional: a `PUBLISH_MODE` variable set to `publish` to skip the draft review.
 

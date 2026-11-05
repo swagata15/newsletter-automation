@@ -181,7 +181,7 @@ def render_visual(v: Visual, out_dir: Path, notes: str, theme: visuals.Theme) ->
     elif v.kind == "photo":
         found = photos.find_photo(v.photo_query or v.caption, out_dir / f"{v.id}-raw")
         if not found:
-            raise ValueError("no photo (set PEXELS_API_KEY to enable photos)")
+            raise ValueError("no photo found (check photo provider keys / network access)")
         path = visuals.duotone(found.path, png, theme, aspect=16 / 9, tint=theme.duotone_photos)
         caption = f"{v.caption} ({found.credit})"
     else:  # "image": the source's own preview image, credited

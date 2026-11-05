@@ -40,4 +40,5 @@ GitHub Action finds it and posts it to Substack as a draft (re-rendering first, 
 
 - GitHub access to this repo (to push).
 - Network access: Full (to read papers and docs, and to fetch article preview images).
-- `PEXELS_API_KEY` environment variable for photos.
+- Photos: nothing required (Openverse needs no key). Optional `PIXABAY_API_KEY` environment variable
+  for stock photos (free at https://pixabay.com/api/docs/).
