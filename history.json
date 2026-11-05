@@ -38,5 +38,13 @@
     "topic": "AI and anxiety: how automation fears are affecting workers' mental health",
     "folder": "issues/ai-and-the-mind/2026-11-24-worried-ai-will-take-your-job-the-worry-itself-has-a-cost",
     "status": "local"
+  },
+  {
+    "date": "2026-11-19",
+    "type": "tutorial",
+    "title": "Build a research assistant that shows its sources",
+    "topic": "Build a research assistant that searches the web and cites its sources",
+    "folder": "issues/weekend-build/2026-11-19-build-a-research-assistant-that-shows-its-sources",
+    "status": "local"
   }
 ]

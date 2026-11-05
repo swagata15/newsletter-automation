@@ -20,4 +20,5 @@ Generated automatically. Status: `local` = saved here only, `draft` = Substack d
 
 | Date | Title | Status |
 |---|---|---|
+| 2026-11-19 | [Build a research assistant that shows its sources](weekend-build/2026-11-19-build-a-research-assistant-that-shows-its-sources/issue.md) | local |
 | 2026-11-12 | [Build a team of AI agents that checks its own work](weekend-build/2026-11-12-build-a-team-of-ai-agents-that-checks-its-own-work/issue.md) | local |

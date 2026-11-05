@@ -1,0 +1,205 @@
+{
+  "title": "Build a research assistant that shows its sources",
+  "subtitle": "Scout searches the web, reads the pages and footnotes every claim. One Python file, one weekend.",
+  "topic": "Build a research assistant that searches the web and cites its sources",
+  "cover_highlight": "shows its sources",
+  "cover_photo_query": "library books research desk",
+  "markdown": "Ask a chatbot a factual question and you get a confident paragraph. Ask \"where did that come from?\" and things get vague. This weekend you'll build the fix: **Scout**, a research assistant that searches the web, reads the actual pages, and puts a numbered source next to every claim. Then it checks its own report for anything it couldn't back up.\n\nIt's one Python file, about 100 lines, and you can run it from your terminal on any question you like.\n\n[[VISUAL:v1]]\n\n## What you'll build\n\nYou type a question, for example \"Which vector database should a small startup use?\", and Scout:\n\n1. **Searches** the web, up to 8 times, choosing its own queries.\n2. **Reads** the most promising pages in full, not just the search snippets.\n3. **Answers** with a direct conclusion first, then the detail.\n4. **Cites** every claim with a numbered footnote that links to the source.\n5. **Checks** its own report and lists any claim that isn't backed by a source.\n\nThe report is saved as a Markdown file you can share, paste into a doc, or keep as a research log.\n\n[[VISUAL:v2]]\n\nThe interesting part is how little you have to build. Search and page reading run on Anthropic's servers as built-in tools, and Claude attaches citations to its answer automatically. Your job is to run the loop, collect the pieces, and present them well.\n\n## Before you start\n\nYou need Python 3.10+ and a Claude API key from the [Claude Console](https://platform.claude.com).\n\n```bash\nmkdir scout && cd scout\npython -m venv .venv && source .venv/bin/activate\npip install anthropic\nexport ANTHROPIC_API_KEY=\"your-key-here\"\n```\n\n**Cost.** Scout runs on Claude Sonnet 5.5. Searches cost $10 per 1,000 on top of normal token costs, and reading pages with the web fetch tool costs nothing extra beyond tokens ([pricing](https://platform.claude.com/docs/en/about-claude/pricing), [web fetch docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool)). With at most 8 searches per question, the search fee tops out at 8 cents.\n\n[[VISUAL:v3]]\n\n## Saturday: search, read and answer\n\n### Step 1: Give Claude its research tools\n\nCreate `scout.py` and start with the setup and the tools:\n\n```python\n\"\"\"Scout: a research assistant that searches the web, reads pages and cites every claim.\"\"\"\nimport argparse\nimport re\nfrom datetime import date\nfrom pathlib import Path\n\nimport anthropic\n\nMODEL = \"claude-sonnet-5-5\"\nclient = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY\n\nSYSTEM = \"\"\"You are a meticulous research assistant. Search the web, open the most authoritative\npages (official sites, papers, primary data) and answer the question. Prefer primary sources over\nnews coverage. Say clearly when sources disagree or when something could not be verified.\nLead with a direct answer, then the supporting detail. Be concise.\"\"\"\n\n\ndef tools(only_domains: list[str] | None = None) -> list[dict]:\n    search = {\"type\": \"web_search_20260209\", \"name\": \"web_search\", \"max_uses\": 8}\n    if only_domains:\n        search[\"allowed_domains\"] = only_domains\n    return [search, {\"type\": \"web_fetch_20260209\", \"name\": \"web_fetch\", \"max_uses\": 5}]\n```\n\nTwo tools do the heavy lifting. [Web search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) finds pages; web fetch opens one and reads the whole thing. A useful safety detail: Claude can only fetch URLs that have already appeared in the conversation, such as a search result, so it can't wander off to random addresses.\n\nThe optional `allowed_domains` setting is a superpower for serious research. Restrict Scout to `arxiv.org,nature.com` and you get answers grounded only in papers.\n\n### Step 2: The research loop\n\nAdd the function that does the work:\n\n```python\ndef research(question: str, only_domains: list[str] | None = None) -> list:\n    \"\"\"Run the search-and-read loop. Returns every content block Claude produced.\"\"\"\n    messages = [{\"role\": \"user\", \"content\": question}]\n    blocks = []\n    for _ in range(6):\n        response = client.messages.create(\n            model=MODEL, max_tokens=16000, system=SYSTEM, messages=messages,\n            tools=tools(only_domains), thinking={\"type\": \"adaptive\"}, output_config={\"effort\": \"medium\"},\n        )\n        blocks += response.content\n        if response.stop_reason != \"pause_turn\":  # long research turns pause; send them back to continue\n            break\n        messages.append({\"role\": \"assistant\", \"content\": response.content})\n    if response.stop_reason == \"refusal\":\n        raise RuntimeError(\"Claude declined this request.\")\n    return blocks\n```\n\nThis is almost the whole agent. Claude decides what to search for, what to read, and when it knows enough, all inside a single API call. The only wrinkle is `pause_turn`: on long research jobs the server pauses partway, and you send the conversation back so it can carry on. We keep every block from every round, because the answer and its citations can arrive across several of them.\n\n**Check before moving on:** in a Python shell, run `import scout; blocks = scout.research(\"What is the population of Iceland?\")` and print `[b.type for b in blocks]`. You should see `server_tool_use`, `web_search_tool_result` and `text` blocks.\n\n## Sunday: citations, self-checks and polish\n\n### Step 3: Turn citations into footnotes\n\nClaude's text comes back in pieces, and each piece can carry a list of citations pointing at the search results it relied on. We number each unique source and append the numbers after the sentence:\n\n```python\ndef to_markdown(question: str, blocks: list) -> str:\n    \"\"\"Turn Claude's answer and its citations into a report with numbered footnotes.\"\"\"\n    sources: dict[str, tuple[int, str]] = {}  # url -> (number, title)\n    pages_read: list[str] = []\n    body = []\n    for b in blocks:\n        if b.type == \"web_fetch_tool_result\" and b.content.type == \"web_fetch_result\":\n            pages_read.append(b.content.url)\n        elif b.type == \"text\":\n            marks = []\n            for c in b.citations or []:\n                if c.type == \"web_search_result_location\":\n                    if c.url not in sources:\n                        sources[c.url] = (len(sources) + 1, c.title or c.url)\n                    n = sources[c.url][0]\n                    if f\"[{n}]\" not in marks:\n                        marks.append(f\"[{n}]\")\n            body.append(b.text + \"\".join(marks))\n    lines = [f\"# {question}\", \"\", f\"*Researched {date.today():%B %d, %Y}*\", \"\", \"\".join(body).strip(), \"\", \"## Sources\"]\n    lines += [f\"{n}. [{title}]({url})\" for url, (n, title) in sorted(sources.items(), key=lambda kv: kv[1][0])]\n    extra = [u for u in dict.fromkeys(pages_read) if u not in sources]\n    if extra:\n        lines += [\"\", \"## Also read\", *[f\"- {u}\" for u in extra]]\n    return \"\\n\".join(lines) + \"\\n\"\n```\n\nThe result reads like a proper research note: claims with [1], [2] markers, a numbered source list, and a separate list of pages Scout read in full.\n\n### Step 4: Make Scout check its own work\n\nEven a careful model sometimes slips in a claim from memory. A second, cheap pass catches it:\n\n```python\ndef check(report: str) -> str:\n    \"\"\"A second, skeptical pass: list any claim in the report that has no footnote.\"\"\"\n    response = client.messages.create(\n        model=MODEL, max_tokens=4000, thinking={\"type\": \"adaptive\"}, output_config={\"effort\": \"low\"},\n        messages=[{\"role\": \"user\", \"content\": \"List every factual claim in this report that has no \"\n                   \"[number] citation, one per line. If every claim is cited, reply exactly: ALL CITED\\n\\n\"\n                   + report}],\n    )\n    return \"\".join(b.text for b in response.content if b.type == \"text\").strip()\n```\n\nThis is the same idea as an editor reading a draft: a fresh pass with one narrow job. If anything comes back other than `ALL CITED`, the report gets a \"Claims to double-check\" section at the bottom, so you know exactly where to look.\n\n### Step 5: Run it\n\nThe bottom of the file wires everything into a command:\n\n```python\ndef slug(text: str) -> str:\n    return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")[:60]\n\n\nif __name__ == \"__main__\":\n    p = argparse.ArgumentParser(description=\"Research a question on the web, with citations.\")\n    p.add_argument(\"question\")\n    p.add_argument(\"--only\", help=\"Comma-separated domains to search, e.g. arxiv.org,nature.com\")\n    args = p.parse_args()\n\n    blocks = research(args.question, args.only.split(\",\") if args.only else None)\n    report = to_markdown(args.question, blocks)\n    verdict = check(report)\n    if verdict != \"ALL CITED\":\n        report += \"\\n## Claims to double-check\\n\\n\" + verdict + \"\\n\"\n\n    out = Path(\"reports\") / f\"{date.today():%Y-%m-%d}-{slug(args.question)}.md\"\n    out.parent.mkdir(exist_ok=True)\n    out.write_text(report)\n    print(report)\n    print(f\"Saved to {out}\")\n```\n\nTry it:\n\n```bash\npython scout.py \"What's the evidence that intermittent fasting helps weight loss?\"\npython scout.py \"How do vector databases compare for small teams?\" --only qdrant.tech,weaviate.io,milvus.io\n```\n\nEach run prints the report and saves it to `reports/`.\n\n[[VISUAL:v4]]\n\n## Common pitfalls\n\n- **Trusting snippets.** Search results are short excerpts. For anything important, let Scout fetch the full page; the system prompt nudges it to read primary sources.\n- **Too many searches.** More searches isn't better research. `max_uses` caps cost and stops the model from wandering. Raise it only for genuinely broad questions.\n- **Ignoring pauses.** Without the `pause_turn` loop, long research jobs quietly stop halfway.\n- **Treating citations as proof.** A citation shows where a claim came from, not that the source is right. The `--only` flag is your quality filter.\n- **Forgetting the date.** Web answers age fast. The report records when it was researched.\n\n## Take it further\n\n- **Academic mode:** default `--only` to journals and preprint servers for literature reviews.\n- **Compare mode:** ask the same question restricted to two different sets of sources and diff the answers.\n- **Watchlist:** run Scout every Monday on questions you care about and get the reports by email.\n- **Team version:** combine it with last week's agent team, using Scout as the researcher worker.\n\n## Resources\n\n- [Web search tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool)\n- [Web fetch tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool)\n- [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)\n- [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)\n\nHappy researching, and send me the best report Scout writes for you. Swagata\n",
+  "visuals": [
+    {
+      "id": "v1",
+      "kind": "photo",
+      "caption": "Good research has always meant showing where things came from.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": "person reading in library"
+    },
+    {
+      "id": "v2",
+      "kind": "diagram",
+      "caption": "Search and page reading run on Anthropic's servers; your code runs the loop and builds the report.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "How Scout works",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": [
+        {
+          "id": "q",
+          "label": "Your question"
+        },
+        {
+          "id": "s",
+          "label": "Web search"
+        },
+        {
+          "id": "f",
+          "label": "Read full pages"
+        },
+        {
+          "id": "a",
+          "label": "Answer with citations"
+        },
+        {
+          "id": "r",
+          "label": "Footnoted report"
+        },
+        {
+          "id": "c",
+          "label": "Citation check"
+        },
+        {
+          "id": "out",
+          "label": "Saved report"
+        }
+      ],
+      "edges": [
+        {
+          "source": "q",
+          "target": "s",
+          "label": ""
+        },
+        {
+          "source": "s",
+          "target": "f",
+          "label": "best results"
+        },
+        {
+          "source": "f",
+          "target": "a",
+          "label": ""
+        },
+        {
+          "source": "a",
+          "target": "r",
+          "label": "footnotes"
+        },
+        {
+          "source": "r",
+          "target": "c",
+          "label": ""
+        },
+        {
+          "source": "c",
+          "target": "out",
+          "label": ""
+        },
+        {
+          "source": "a",
+          "target": "s",
+          "label": "needs more"
+        }
+      ],
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v3",
+      "kind": "stat",
+      "caption": "Reading pages is free beyond tokens; searches are the only extra fee.",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "source_name": "Claude pricing and web fetch docs",
+      "chart_type": null,
+      "chart_title": "What Scout costs to run",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": [
+        {
+          "value": "$10",
+          "label": "per 1,000 web searches, plus normal token costs"
+        },
+        {
+          "value": "$0",
+          "label": "extra for reading full pages with web fetch"
+        },
+        {
+          "value": "8",
+          "label": "searches at most per question (our cap)"
+        }
+      ],
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v4",
+      "kind": "timeline",
+      "caption": "Two days, one genuinely useful research tool.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "Your weekend plan",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": [
+        {
+          "when": "Sat AM",
+          "title": "Give Claude search and fetch tools",
+          "detail": "Set up the project and the two built-in tools."
+        },
+        {
+          "when": "Sat PM",
+          "title": "Write the research loop",
+          "detail": "One call that searches, reads and answers, with pause handling."
+        },
+        {
+          "when": "Sun AM",
+          "title": "Turn citations into footnotes",
+          "detail": "Number every source and list the pages read."
+        },
+        {
+          "when": "Sun PM",
+          "title": "Add the self-check and the CLI",
+          "detail": "Flag uncited claims and save reports to disk."
+        }
+      ],
+      "photo_query": null
+    }
+  ]
+}
