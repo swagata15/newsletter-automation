@@ -102,5 +102,13 @@
     "topic": "Build a coding agent from scratch",
     "folder": "issues/weekend-build/2026-12-17-build-your-own-coding-agent-from-scratch",
     "status": "local"
+  },
+  {
+    "date": "2026-12-22",
+    "type": "psychology",
+    "title": "Growing up with AI: what it means for kids' minds",
+    "topic": "Growing up with AI: what chatbots and voice assistants mean for kids' development",
+    "folder": "issues/ai-and-the-mind/2026-12-22-growing-up-with-ai-what-it-means-for-kids-minds",
+    "status": "local"
   }
 ]
