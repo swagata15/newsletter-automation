@@ -65,7 +65,7 @@ def load_history() -> list[dict]:
 
 def record_history(built: Built, status: str, config: dict) -> None:
     history = load_history()
-    entry = {"date": date.today().isoformat(), "type": built.kind, "title": built.issue.title,
+    entry = {"date": built.out_dir.name[:10], "type": built.kind, "title": built.issue.title,
              "topic": built.issue.topic, "folder": str(built.out_dir), "status": status}
     history = [h for h in history if h.get("folder") != entry["folder"]] + [entry]
     HISTORY.write_text(json.dumps(history, indent=2) + "\n")
@@ -220,15 +220,25 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
     }[kind]()
     issue = claude.write_issue(client, write_prompt, effort=cfg["effort"])
     issue.topic = topic
+    return assemble(kind, config, issue, notes, client=client)
 
-    out_dir = category_dir(config, kind) / f"{date.today():%Y-%m-%d}-{slugify(issue.title)}"
+
+def assemble(kind: str, config: dict, issue: Issue, notes: str, client: anthropic.Anthropic | None = None,
+             issue_date: date | None = None, out_dir: Path | None = None) -> Built:
+    """Steps after writing: style clean-up, fact-checked visuals, cover, save. No API needed unless
+    `client` is given (then stock AI phrases are rewritten by Claude; otherwise they are only reported)."""
+    issue_date = issue_date or date.today()
+    theme = visuals.Theme.from_config(config, kind)
+    out_dir = out_dir or category_dir(config, kind) / f"{issue_date:%Y-%m-%d}-{slugify(issue.title)}"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "research-notes.md").write_text(notes)
 
     # 3. Style: strip dashes, rewrite stock AI phrases, strip dashes again
     issue.markdown = remove_dashes(issue.markdown)
     slop = find_slop(issue.markdown)
-    if slop:
+    if slop and client is None:
+        log.warning("Stock phrases found (no API client to rewrite them): %s", slop)
+    elif slop:
         log.info("Rewriting stock phrases: %s", slop)
         issue.markdown = remove_dashes(claude.revise_style(client, issue.markdown, slop))
         leftover = find_slop(issue.markdown)
@@ -264,7 +274,8 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
         if found:
             cover_photo = visuals.duotone(found.path, out_dir / "cover-photo.png", theme, width_px=900,
                                           aspect=visuals.COVER_PHOTO_ASPECT, tint=theme.duotone_photos)
-        cover = visuals.render_cover(issue.title, issue.cover_highlight, out_dir / "cover.png", theme, cover_photo)
+        cover = visuals.render_cover(issue.title, issue.cover_highlight, out_dir / "cover.png", theme, cover_photo,
+                                     issue_date=issue_date)
         credit = f' "{found.credit}"' if found else ""
         markdown = f"![{issue.title}]({cover.resolve()}{credit})\n\n{markdown}"
     except Exception as exc:
@@ -275,3 +286,29 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
     (out_dir / "issue.json").write_text(issue.model_dump_json(indent=2))
     log.info("Saved %s", out_dir / "issue.md")
     return Built(kind, issue, markdown, out_dir)
+
+
+# ---------------------------------------------------------------- pre-made issues
+def kind_of_folder(config: dict, folder: Path) -> str:
+    for kind in KINDS:
+        if category_dir(config, kind).resolve() == folder.resolve().parent:
+            return kind
+    raise ValueError(f"{folder} is not inside an issues/<category>/ folder")
+
+
+def rerender(folder: Path, config: dict) -> Built:
+    """Re-draw an existing issue from its issue.json and research notes (e.g. to add photos later)."""
+    kind = kind_of_folder(config, folder)
+    issue = Issue.model_validate_json((folder / "issue.json").read_text())
+    notes = (folder / "research-notes.md").read_text()
+    issue_date = date.fromisoformat(folder.name[:10])
+    return assemble(kind, config, issue, notes, issue_date=issue_date, out_dir=folder)
+
+
+def premade_for(kind: str, day: date) -> Path | None:
+    """A pre-written issue scheduled for this day that hasn't been sent to Substack yet."""
+    for h in load_history():
+        if h["type"] == kind and h["date"] == day.isoformat() and h.get("status") == "local" and h.get("folder"):
+            if Path(h["folder"], "issue.json").exists():
+                return Path(h["folder"])
+    return None
