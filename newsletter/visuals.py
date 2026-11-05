@@ -44,6 +44,7 @@ IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
 @dataclass
 class Theme:
     newsletter: str = "My AI Newsletter"
+    author: str = ""
     section: str = "This Week in AI"
     section_color: str = "#1B3A5C"
     paper: str = "#F4EFE6"
@@ -62,7 +63,8 @@ class Theme:
     def from_config(cls, config: dict, kind: str) -> "Theme":
         brand = {k: v for k, v in (config.get("brand") or {}).items() if k in cls.__dataclass_fields__}
         issue = config["issues"][kind]
-        return cls(newsletter=config["newsletter"]["name"], section=issue.get("label", kind),
+        return cls(newsletter=config["newsletter"]["name"], author=config["newsletter"].get("author", ""),
+                   section=issue.get("label", kind),
                    section_color=issue.get("color", brand.get("primary", "#1B3A5C")), **brand)
 
 
@@ -138,8 +140,8 @@ def _source_line(fig, t: Theme, name: str, url: str = "") -> None:
     bits = [b for b in (name, dom) if b]
     if bits:
         fig.text(0.035, 0.2 / fh, "SOURCE · " + " · ".join(bits), fontfamily=MONO, fontweight="medium", fontsize=8.5, color=t.graphite)
-    fig.text(0.965, 0.2 / fh, t.newsletter.upper(), fontfamily=COND, fontweight="bold", fontsize=9,
-             color=t.graphite, ha="right")
+    sign = t.newsletter.upper() + (f"  ·  {t.author.upper()}" if t.author else "")
+    fig.text(0.965, 0.2 / fh, sign, fontfamily=COND, fontweight="bold", fontsize=9, color=t.graphite, ha="right")
 
 
 def _pen_note(ax, t: Theme, text: str, target, dx=0.0, dy=0.0, rad=-0.3, text_pos=None):
@@ -670,5 +672,11 @@ def render_cover(title: str, highlight: str, path: Path, t: Theme, photo: Path |
             _highlight(fig, t, x0, full.y0, meas(line[:b]), full.y1, seed=20 + i)
         offset += len(line) + 1
 
-    fig.text(0.04, 0.06, "THE EVIDENCE, MARKED UP.", fontfamily=MONO, fontweight="medium", fontsize=8.5, color=t.graphite)
+    if t.author:
+        by = fig.text(0.04, 0.075, f"BY {t.author.upper()}", fontfamily=COND, fontweight="bold", fontsize=12.5,
+                      color=t.ink, va="bottom")
+        fig.add_artist(Rectangle((0.04, 0.065), _text_box(fig, by).width, 0.004, transform=fig.transFigure,
+                                 color=t.section_color, lw=0))
+    fig.text(split - 0.035, 0.075, "THE EVIDENCE, MARKED UP.", fontfamily=MONO, fontweight="medium", fontsize=8.5,
+             color=t.graphite, ha="right", va="bottom")
     return _save(fig, path)

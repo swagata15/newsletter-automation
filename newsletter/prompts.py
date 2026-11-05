@@ -86,7 +86,7 @@ Structure:
   - 2 short paragraphs: what happened (concrete details), then why it matters / our take
   - a final line: `**Source:** [name](url)` plus any useful extra link
 - `## Also worth a look`: 3-5 one-line bullets with links for the runners up.
-- A one-line sign-off.
+- A one-line sign-off, signed "{nl.get('author', '')}".
 
 Visual mix: an "image" for each of the top items, plus ONE "timeline" near the top showing the week's
 key moments by day (only dates in the notes), plus ONE "stat" card or "chart" if the notes have solid
@@ -140,7 +140,8 @@ Structure (adapt headings to the topic, keep them specific, not generic):
 - `## Who is most affected` (if the evidence supports it).
 - `## What this means for you`: concrete, evidence-based takeaways as a short list.
 - `## How we researched this`: 2-3 sentences on the sources used.
-- `## References`: numbered list, full citations with links, in the order first cited.
+- A short sign-off line signed "{nl.get('author', '')}", then `## References`: numbered list, full
+  citations with links, in the order first cited.
 
 Citations: cite inline as ([Author et al., Year](url)) the first time, and keep it natural after that.
 Every number in the article must come from the notes and be attributable to a reference.
@@ -191,6 +192,7 @@ Structure:
 - `## Common pitfalls`
 - `## Take it further`: 3-5 ideas.
 - `## Resources`: linked docs and repos from the notes.
+- A one-line sign-off signed "{nl.get('author', '')}".
 
 Code rules: complete, runnable, consistent across steps (same file and function names), with only the
 APIs, package names and model names verified in the notes. Keep files small. Use fenced code blocks

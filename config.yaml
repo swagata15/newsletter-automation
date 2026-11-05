@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------------
 newsletter:
   name: "My AI Newsletter"
+  author: "Swagata Ashwani"    # byline on covers, graphics and the sign-off
   audience: "builders, founders and curious professionals who want to understand AI without the hype"
   voice: "a sharp, warm human writer: plain words, concrete specifics, honest opinions, occasional dry humour"
 
