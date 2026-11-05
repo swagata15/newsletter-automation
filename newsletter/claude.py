@@ -94,5 +94,28 @@ def write_issue(client: anthropic.Anthropic, prompt: str, *, effort: str) -> Iss
     return issue
 
 
+def approve_photo(client: anthropic.Anthropic, path, query: str) -> bool:
+    """Look at a candidate photo: does it match the brief and is it appropriate for a newsletter?"""
+    import base64
+    data = base64.standard_b64encode(open(path, "rb").read()).decode()
+    media = "image/png" if str(path).endswith(".png") else "image/jpeg"
+    prompt = (f"A newsletter needs a photo of: {query}\n"
+              "Answer YES only if this photo (1) clearly matches that description, (2) is realistic and good "
+              "quality, (3) is appropriate for a professional newsletter: no nudity, suggestive poses, violence, "
+              "visible logos as the main subject, or text overlays/watermarks. Otherwise answer NO. "
+              "Reply with YES or NO, then one short reason.")
+    msg = client.messages.create(
+        model=MODEL, max_tokens=2000, output_config={"effort": "low"},
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}},
+            {"type": "text", "text": prompt}]}],
+    )
+    if msg.stop_reason == "refusal":
+        return False
+    answer = _text(msg).strip().upper()
+    log.info("Photo review for %r: %s", query, _text(msg).strip()[:120])
+    return answer.startswith("YES")
+
+
 def revise_style(client: anthropic.Anthropic, markdown: str, phrases: list[str]) -> str:
     return quick_answer(client, REVISE_PROMPT.format(phrases=", ".join(f'"{p}"' for p in phrases), markdown=markdown))

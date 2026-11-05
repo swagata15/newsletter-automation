@@ -163,7 +163,8 @@ def _pen_note(ax, t: Theme, text: str, target, dx=0.0, dy=0.0, rad=-0.3, text_po
 
 
 def _fmt(v: float, unit: str | None) -> str:
-    s = f"{v:,.0f}" if abs(v) >= 100 or float(v).is_integer() else f"{v:,.1f}"
+    """Show values with the precision the source used (up to 2 decimals), never rounded away."""
+    s = f"{v:,.0f}" if float(v).is_integer() else f"{v:,.2f}".rstrip("0").rstrip(".")
     return f"{s}{unit}" if unit and len(unit) <= 2 else s
 
 
@@ -259,7 +260,7 @@ def render_chart(v: Visual, path: Path, t: Theme) -> Path:
             ax.spines["left"].set_color(t.ink)
             ax.margins(x=0.45 if v.annotation else 0.1, y=0.03)
         else:
-            ax.set_xticks(range(len(cats)), [textwrap.fill(c, 14) for c in cats])
+            ax.set_xticks(range(len(cats)), [textwrap.fill(c, max(14, 60 // len(cats))) for c in cats])
             ax.yaxis.set_visible(False)
             for side in ("top", "right", "left"):
                 ax.spines[side].set_visible(False)
@@ -278,12 +279,16 @@ def render_chart(v: Visual, path: Path, t: Theme) -> Path:
         tx, _ = ax.transAxes.inverted().transform(ax.transData.transform(target))
         side = -1 if tx > 0.55 else 1  # write the note on the roomier side
         if kind == "hbar":
-            _pen_note(ax, t, v.annotation, target, dx=0.12, dy=-0.34 if (hi or 0) < len(cats) / 2 else 0.34,
-                      rad=-0.35)
+            lab = _text_box(fig, value_labels[0][hi])  # figure coords of the highlighted value label
+            disp = fig.transFigure.transform((lab.x1, (lab.y0 + lab.y1) / 2))
+            tgt = tuple(ax.transData.inverted().transform(disp))
+            ax_x, ax_y = ax.transAxes.inverted().transform(disp)
+            _pen_note(ax, t, v.annotation, tgt, rad=0.0,
+                      text_pos=(min(ax_x + 0.24, 0.84), min(max(ax_y, 0.08), 0.92)))
         elif kind == "line":
             _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.2, rad=0.3 * side)
         else:
-            _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.16, rad=0.3 * side)
+            _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.3, rad=0.3 * side)
 
     _source_line(fig, t, v.source_name, v.source_url)
     return _save(fig, path)

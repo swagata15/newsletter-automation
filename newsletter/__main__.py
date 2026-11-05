@@ -17,6 +17,7 @@ Every issue is saved under issues/<category>/<date>-<title>/ and listed in issue
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from pathlib import Path
@@ -49,6 +50,7 @@ def main() -> None:
     p.add_argument("--from-json", metavar="FILE", help="Assemble a hand-written issue.json (no API calls).")
     p.add_argument("--notes", metavar="FILE", help="Research notes for --from-json (used to fact-check visuals).")
     p.add_argument("--date", help="Issue date YYYY-MM-DD for --from-json (folder name and cover).")
+    p.add_argument("--photos", metavar="FILE", help="photos.json with hand-picked photos for --from-json.")
     args = p.parse_args()
 
     config = yaml.safe_load(Path(args.config).read_text())
@@ -65,7 +67,8 @@ def main() -> None:
             raise SystemExit("--from-json needs --type weekly|psychology|tutorial")
         issue = Issue.model_validate_json(Path(args.from_json).read_text())
         notes = Path(args.notes).read_text() if args.notes else ""
-        built = assemble(args.type, config, issue, notes,
+        pins = json.loads(Path(args.photos).read_text()) if args.photos else None
+        built = assemble(args.type, config, issue, notes, photo_pins=pins,
                          issue_date=date.fromisoformat(args.date) if args.date else None)
         status = "local"
         if not args.dry_run:

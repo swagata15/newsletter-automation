@@ -158,7 +158,20 @@ def _image_md(path: Path, alt: str, caption: str) -> str:
     return f'![{alt}]({path.resolve()} "{caption}")'
 
 
-def render_visual(v: Visual, out_dir: Path, notes: str, theme: visuals.Theme) -> str:
+def _photo(key: str, query: str, out_dir: Path, approve) -> "photos.Photo | None":
+    """Pinned photo from photos.json if there is one; otherwise search (+ review) and pin the result."""
+    pins_file = out_dir / "photos.json"
+    pins = json.loads(pins_file.read_text()) if pins_file.exists() else {}
+    if key in pins:
+        return photos.from_pin(pins[key], out_dir / f"{key}-raw") if pins[key] else None
+    found = photos.find_photo(query, out_dir / f"{key}-raw", approve)
+    if found:
+        pins[key] = {"url": found.url, "credit": found.credit, "page": found.page_url, "query": query}
+        pins_file.write_text(json.dumps(pins, indent=2) + "\n")
+    return found
+
+
+def render_visual(v: Visual, out_dir: Path, notes: str, theme: visuals.Theme, approve=None) -> str:
     stem = out_dir / v.id
     png = stem.with_suffix(".png")
     caption = v.caption
@@ -179,7 +192,7 @@ def render_visual(v: Visual, out_dir: Path, notes: str, theme: visuals.Theme) ->
     elif v.kind == "diagram":
         path = visuals.render_diagram(v, png, theme)
     elif v.kind == "photo":
-        found = photos.find_photo(v.photo_query or v.caption, out_dir / f"{v.id}-raw")
+        found = _photo(v.id, v.photo_query or v.caption, out_dir, approve)
         if not found:
             raise ValueError("no photo found (check photo provider keys / network access)")
         path = visuals.duotone(found.path, png, theme, aspect=16 / 9, tint=theme.duotone_photos)
@@ -224,14 +237,20 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
 
 
 def assemble(kind: str, config: dict, issue: Issue, notes: str, client: anthropic.Anthropic | None = None,
-             issue_date: date | None = None, out_dir: Path | None = None) -> Built:
+             issue_date: date | None = None, out_dir: Path | None = None, approve=None,
+             photo_pins: dict | None = None) -> Built:
     """Steps after writing: style clean-up, fact-checked visuals, cover, save. No API needed unless
     `client` is given (then stock AI phrases are rewritten by Claude; otherwise they are only reported)."""
     issue_date = issue_date or date.today()
     theme = visuals.Theme.from_config(config, kind)
+    approve = approve or ((lambda path, query: claude.approve_photo(client, path, query)) if client else None)
+    if approve is None:
+        log.warning("No photo review available: photos are used unchecked. Review them before publishing.")
     out_dir = out_dir or category_dir(config, kind) / f"{issue_date:%Y-%m-%d}-{slugify(issue.title)}"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "research-notes.md").write_text(notes)
+    if photo_pins is not None:  # photos chosen by hand ({"v4": {...}, "cover": {...}}, null = no photo)
+        (out_dir / "photos.json").write_text(json.dumps(photo_pins, indent=2) + "\n")
 
     # 3. Style: strip dashes, rewrite stock AI phrases, strip dashes again
     issue.markdown = remove_dashes(issue.markdown)
@@ -258,7 +277,7 @@ def assemble(kind: str, config: dict, issue: Issue, notes: str, client: anthropi
     markdown = issue.markdown
     for v in issue.visuals:
         try:
-            replacement = render_visual(v, out_dir, notes, theme)
+            replacement = render_visual(v, out_dir, notes, theme, approve)
             log.info("Visual %s (%s) rendered", v.id, v.kind)
         except Exception as exc:
             log.warning("Skipping visual %s (%s): %s", v.id, v.kind, exc)
@@ -270,7 +289,7 @@ def assemble(kind: str, config: dict, issue: Issue, notes: str, client: anthropi
     # 5. Cover (Substack uses the first image as the social preview)
     try:
         cover_photo = None
-        found = photos.find_photo(issue.cover_photo_query, out_dir / "cover-raw")
+        found = _photo("cover", issue.cover_photo_query, out_dir, approve)
         if found:
             cover_photo = visuals.duotone(found.path, out_dir / "cover-photo.png", theme, width_px=900,
                                           aspect=visuals.COVER_PHOTO_ASPECT, tint=theme.duotone_photos)
