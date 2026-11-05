@@ -55,6 +55,10 @@ issues:
       - "AI and anxiety: how automation fears are affecting workers' mental health"
       - "Do people trust AI more than humans? The psychology of algorithm appreciation and aversion"
       - "AI therapy chatbots: does the evidence support them?"
+      - "Sycophancy: AI that always agrees, and what it does to our judgment"
+      - "Growing up with AI: what chatbots and voice assistants mean for kids' development"
+      - "Grief tech: AI recreations of people who have died"
+      - "AI relationships and love: who falls for a chatbot, and what it does to them"
 
   tutorial:
     label: "Weekend Build"
@@ -71,6 +75,7 @@ issues:
       - "Build a RAG chatbot over your own documents"
       - "Build an AI agent that triages your inbox"
       - "Build an evaluation harness to test your LLM app"
+      - "Build a coding agent from scratch"
 
 # RSS/Atom feeds for the weekly roundup (GitHub, Hugging Face papers and
 # Hacker News are pulled automatically on top of these).

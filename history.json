@@ -86,5 +86,13 @@
     "topic": "Build an evaluation harness to test your LLM app",
     "folder": "issues/weekend-build/2026-12-10-build-a-test-harness-so-you-know-your-ai-app-actually-got",
     "status": "local"
+  },
+  {
+    "date": "2026-12-15",
+    "type": "psychology",
+    "title": "Your AI agrees with you too much. That's a problem",
+    "topic": "Sycophancy: AI that always agrees, and what it does to our judgment",
+    "folder": "issues/ai-and-the-mind/2026-12-15-your-ai-agrees-with-you-too-much-that-s-a-problem",
+    "status": "local"
   }
 ]
