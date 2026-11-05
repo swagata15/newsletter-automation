@@ -4,7 +4,9 @@ Generated automatically. Status: `local` = saved here only, `draft` = Substack d
 
 ## This Week in AI
 
-_None yet._
+| Date | Title | Status |
+|---|---|---|
+| 2026-11-06 | [AI agents are everywhere except the receipts](this-week-in-ai/2026-11-06-ai-agents-are-everywhere-except-the-receipts/issue.md) | local |
 
 ## AI and the Mind
 
