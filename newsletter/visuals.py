@@ -43,7 +43,7 @@ IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
 
 @dataclass
 class Theme:
-    newsletter: str = "My AI Newsletter"
+    newsletter: str = "Swagata Ashwani"
     author: str = ""
     section: str = "This Week in AI"
     section_color: str = "#1B3A5C"
@@ -140,7 +140,8 @@ def _source_line(fig, t: Theme, name: str, url: str = "") -> None:
     bits = [b for b in (name, dom) if b]
     if bits:
         fig.text(0.035, 0.2 / fh, "SOURCE · " + " · ".join(bits), fontfamily=MONO, fontweight="medium", fontsize=8.5, color=t.graphite)
-    sign = t.newsletter.upper() + (f"  ·  {t.author.upper()}" if t.author else "")
+    extra = t.author and t.author.strip().lower() != t.newsletter.strip().lower()
+    sign = t.newsletter.upper() + (f"  ·  {t.author.upper()}" if extra else "")
     fig.text(0.965, 0.2 / fh, sign, fontfamily=COND, fontweight="bold", fontsize=9, color=t.graphite, ha="right")
 
 
@@ -677,11 +678,12 @@ def render_cover(title: str, highlight: str, path: Path, t: Theme, photo: Path |
             _highlight(fig, t, x0, full.y0, meas(line[:b]), full.y1, seed=20 + i)
         offset += len(line) + 1
 
-    if t.author:
+    if t.author and t.author.strip().lower() != t.newsletter.strip().lower():
         by = fig.text(0.04, 0.075, f"BY {t.author.upper()}", fontfamily=COND, fontweight="bold", fontsize=12.5,
                       color=t.ink, va="bottom")
         fig.add_artist(Rectangle((0.04, 0.065), _text_box(fig, by).width, 0.004, transform=fig.transFigure,
                                  color=t.section_color, lw=0))
-    fig.text(split - 0.035, 0.075, "THE EVIDENCE, MARKED UP.", fontfamily=MONO, fontweight="medium", fontsize=8.5,
-             color=t.graphite, ha="right", va="bottom")
+    has_byline = t.author and t.author.strip().lower() != t.newsletter.strip().lower()
+    fig.text(split - 0.035 if has_byline else 0.04, 0.075, "THE EVIDENCE, MARKED UP.", fontfamily=MONO,
+             fontweight="medium", fontsize=8.5, color=t.graphite, ha="right" if has_byline else "left", va="bottom")
     return _save(fig, path)

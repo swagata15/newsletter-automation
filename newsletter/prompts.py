@@ -75,7 +75,7 @@ Output, for each of the 10 items:
 
 
 def weekly_write(notes: str, cfg: dict, nl: dict, date_str: str) -> str:
-    return f"""Write this week's "{cfg['label']}" issue of {nl['name']} for {nl['audience']}.
+    return f"""Write this week's "{cfg['label']}" issue of {nl['name']}'s newsletter for {nl['audience']}.
 Date: {date_str}. Voice: {nl['voice']}.
 
 Structure:
@@ -123,7 +123,7 @@ E. Practical, evidence-based takeaways for ordinary readers."""
 
 
 def psychology_write(topic: str, notes: str, cfg: dict, nl: dict, date_str: str) -> str:
-    return f"""Write this week's "{cfg['label']}" issue of {nl['name']}: a deeply researched, data-driven article on
+    return f"""Write this week's "{cfg['label']}" issue of {nl['name']}'s newsletter: a deeply researched, data-driven article on
 "{topic}". Audience: {nl['audience']}. Voice: {nl['voice']}. Date: {date_str}.
 Length: about {cfg['target_words']} words.
 
@@ -179,7 +179,7 @@ further reading links."""
 
 
 def tutorial_write(topic: str, notes: str, cfg: dict, nl: dict, date_str: str) -> str:
-    return f"""Write this week's "{cfg['label']}" issue of {nl['name']}: a hands-on tutorial on "{topic}".
+    return f"""Write this week's "{cfg['label']}" issue of {nl['name']}'s newsletter: a hands-on tutorial on "{topic}".
 Audience: {nl['audience']} (comfortable with basic {cfg['language']}). Voice: {nl['voice']}. Date: {date_str}.
 Length: about {cfg['target_words']} words of prose plus code.
 
