@@ -44,7 +44,9 @@ class Built:
 # ---------------------------------------------------------------- folders, history, index
 def slugify(text: str, limit: int = 60) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return s[:limit].rstrip("-") or "issue"
+    if len(s) > limit:  # cut at a word boundary, not mid-word
+        s = s[:limit + 1].rsplit("-", 1)[0]
+    return s.rstrip("-") or "issue"
 
 
 def category_dir(config: dict, kind: str) -> Path:

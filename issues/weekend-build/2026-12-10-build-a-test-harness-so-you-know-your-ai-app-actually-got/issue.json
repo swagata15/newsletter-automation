@@ -1,0 +1,183 @@
+{
+  "title": "Build a test harness so you know your AI app actually got better",
+  "subtitle": "EvalKit runs your test questions, grades every answer two ways, and flags anything that got worse.",
+  "topic": "Build an evaluation harness to test your LLM app",
+  "cover_highlight": "actually got better",
+  "cover_photo_query": "checklist clipboard pen",
+  "markdown": "You changed one line in a prompt and the answers feel better. Do they? Or did you fix the question you were looking at and quietly break three others? Without tests, every change to an LLM app is a guess.\n\nThis weekend you'll build **EvalKit**, a small test harness you can point at any AI app, including the chatbots from earlier Weekend Builds. It runs a set of test questions, grades every answer two ways, saves the results, and tells you exactly which questions got worse since the last run.\n\n[[VISUAL:v1]]\n\n## What you'll build\n\n1. **A test file.** One line per case: a question, a reference answer, and any words the answer must or must not contain.\n2. **Two graders.** Fast code checks catch the obvious failures. A Claude \"judge\" with a strict rubric handles the nuanced ones.\n3. **A run log.** Every run is saved, so you can see your pass rate move over time.\n4. **Regression alerts.** If something passed last time and fails now, EvalKit names it and exits with an error code, so it can block a bad change automatically.\n\n[[VISUAL:v2]]\n\nThe approach follows [Anthropic's own guidance on evals](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests): automate the grading, start with the fastest reliable checks, and use a model as judge where rules can't capture the nuance.\n\n## Before you start\n\nYou need Python 3.10+, a Claude API key from the [Claude Console](https://platform.claude.com), and an app to test. If you built AskDocs two weeks ago, use that; otherwise EvalKit ships with a tiny example app.\n\n```bash\nmkdir evalkit && cd evalkit\npython -m venv .venv && source .venv/bin/activate\npip install anthropic pydantic\nexport ANTHROPIC_API_KEY=\"your-key-here\"\n```\n\n**Cost.** Each case costs one call to your app plus one call to the judge on Claude Opus 5.5 ($4 per million input tokens, $20 per million output; [pricing](https://platform.claude.com/docs/en/about-claude/pricing)). A run of 50 short cases costs cents, which is cheap insurance for a production app.\n\n## Saturday: test cases and graders\n\n### Step 1: Write your first test cases\n\nCreate `cases.jsonl`. Each line is one case:\n\n```json\n{\"id\": \"leave-days\", \"input\": \"How many days of paid leave do employees get?\", \"must_include\": [\"25\"], \"reference\": \"Employees get 25 days of paid leave per year.\"}\n{\"id\": \"carry-over\", \"input\": \"Can I carry unused leave into next year?\", \"must_include\": [\"5\"], \"reference\": \"Up to 5 unused days can carry over.\"}\n{\"id\": \"not-covered\", \"input\": \"What is the parental leave policy?\", \"must_not_include\": [\"weeks of paid parental leave\"], \"reference\": \"The documents don't cover parental leave, so the assistant should say it doesn't know.\"}\n```\n\nThree cases is a start, not a test suite. Aim for 30 to 50 by the end of the weekend: common questions, tricky ones, and at least a few your app *shouldn't* answer, like the parental leave case above. Anthropic's advice is blunt:\n\n[[VISUAL:v3]]\n\nGood sources of cases: real questions from users, support tickets, and every bug you've ever fixed. Each bug becomes a case so it can never quietly come back.\n\n### Step 2: Plug in your app and the code checks\n\nCreate `evalkit.py`. The first part is the app under test, which you replace with a call into your own:\n\n```python\n\"\"\"EvalKit: a small, honest test harness for an LLM app.\"\"\"\nimport json\nimport sys\nfrom concurrent.futures import ThreadPoolExecutor\nfrom datetime import datetime\nfrom pathlib import Path\n\nimport anthropic\nfrom pydantic import BaseModel, Field\n\nJUDGE_MODEL = \"claude-opus-5-5\"  # the judge should be at least as capable as the app it grades\nclient = anthropic.Anthropic()\n\n\n# ---- 1. The app under test. Replace this with a call into your own app. --------------------------\ndef app(question: str) -> str:\n    response = client.messages.create(\n        model=\"claude-sonnet-5-5\", max_tokens=2000,\n        system=\"You are the HR assistant. Answer only from company policy; say you don't know otherwise.\",\n        messages=[{\"role\": \"user\", \"content\": question}],\n    )\n    return \"\".join(b.text for b in response.content if b.type == \"text\")\n```\n\nThen the first grader:\n\n```python\n# ---- 2. Graders -----------------------------------------------------------------------------------\ndef code_checks(case: dict, output: str) -> list[str]:\n    \"\"\"Cheap, exact, deterministic checks. Always run these first.\"\"\"\n    problems = []\n    for text in case.get(\"must_include\", []):\n        if text.lower() not in output.lower():\n            problems.append(f\"missing '{text}'\")\n    for text in case.get(\"must_not_include\", []):\n        if text.lower() in output.lower():\n            problems.append(f\"should not contain '{text}'\")\n    return problems\n```\n\nCode checks are dumb on purpose. They're instant, free and never inconsistent. If the answer to \"how many days of leave?\" doesn't contain \"25\", no amount of eloquence should make it pass.\n\n## Sunday: the judge, the runs and the alarms\n\n### Step 3: Add an LLM judge\n\nSome answers can't be checked with string matching: \"Yes, five days roll over\" and \"you can carry up to 5 unused days\" both say the same thing. That's what the judge is for:\n\n```python\nclass Verdict(BaseModel):\n    score: int = Field(description=\"1 (wrong or harmful) to 5 (correct, complete and clear)\")\n    passed: bool = Field(description=\"True only if the answer is correct and matches the reference in substance\")\n    reason: str = Field(description=\"One sentence explaining the score\")\n\n\nRUBRIC = \"\"\"You grade answers from an AI assistant. Compare the answer with the reference.\nPass it only if it is factually consistent with the reference and answers the question.\nAn honest \"I don't know\" is correct when the reference says the information isn't available.\nIgnore style and length. Be strict about facts.\"\"\"\n\n\ndef judge(case: dict, output: str) -> Verdict:\n    response = client.messages.parse(\n        model=JUDGE_MODEL, max_tokens=2000, system=RUBRIC, output_format=Verdict,\n        thinking={\"type\": \"adaptive\"}, output_config={\"effort\": \"medium\"},\n        messages=[{\"role\": \"user\", \"content\": f\"Question: {case['input']}\\n\\nReference: {case['reference']}\"\n                   f\"\\n\\n<answer>\\n{output}\\n</answer>\"}],\n    )\n    return response.parsed_output or Verdict(score=1, passed=False, reason=\"Judge returned no verdict.\")\n```\n\nThree details make the judge trustworthy. It returns a structured `Verdict`, so there's nothing to parse. The rubric tells it to ignore style and focus on facts, because judges otherwise reward longer, friendlier answers. And it runs on a model at least as capable as the app it's grading.\n\n### Step 4: Run, save and compare\n\nThe rest of the file runs every case, saves the results and looks for regressions:\n\n```python\n# ---- 3. Run, score and compare ----------------------------------------------------------------------\ndef run_case(case: dict) -> dict:\n    output = app(case[\"input\"])\n    problems = code_checks(case, output)\n    verdict = judge(case, output)\n    return {\"id\": case[\"id\"], \"passed\": verdict.passed and not problems, \"score\": verdict.score,\n            \"problems\": problems, \"reason\": verdict.reason, \"output\": output}\n\n\ndef compare(results: list[dict], previous_file: Path | None) -> list[str]:\n    \"\"\"Which cases passed last time but fail now?\"\"\"\n    if not previous_file:\n        return []\n    before = {r[\"id\"]: r[\"passed\"] for r in json.loads(previous_file.read_text())[\"results\"]}\n    return [r[\"id\"] for r in results if before.get(r[\"id\"]) and not r[\"passed\"]]\n\n\ndef main(cases_file: str = \"cases.jsonl\") -> int:\n    cases = [json.loads(line) for line in Path(cases_file).read_text().splitlines() if line.strip()]\n    with ThreadPoolExecutor(max_workers=4) as pool:\n        results = list(pool.map(run_case, cases))\n\n    runs = Path(\"runs\")\n    runs.mkdir(exist_ok=True)\n    previous = max(runs.glob(\"*.json\"), default=None)\n    regressions = compare(results, previous)\n    passed = sum(r[\"passed\"] for r in results)\n    stamp = datetime.now().strftime(\"%Y%m%d-%H%M%S\")\n    (runs / f\"{stamp}.json\").write_text(json.dumps({\"passed\": passed, \"total\": len(results), \"results\": results}, indent=2))\n\n    for r in results:\n        mark = \"PASS\" if r[\"passed\"] else \"FAIL\"\n        print(f\"{mark}  {r['id']:<14} score {r['score']}  {'; '.join(r['problems']) or r['reason']}\")\n    print(f\"\\n{passed}/{len(results)} passed ({passed / len(results):.0%})\")\n    if regressions:\n        print(\"Regressions since last run: \" + \", \".join(regressions))\n    return 1 if regressions else 0  # a non-zero exit code lets CI block a bad change\n\n\nif __name__ == \"__main__\":\n    sys.exit(main(*sys.argv[1:]))\n```\n\nRun it:\n\n```bash\npython evalkit.py\n```\n\nYou'll get one line per case and a pass rate. Change your prompt, run it again, and if a case that used to pass now fails, EvalKit names it.\n\n[[VISUAL:v4]]\n\nWhen I tested this, one run nicely showed why you want both graders: the app gave a wrong number of leave days, the simulated judge was fooled, and the simple \"must include 25\" check caught it anyway. Belt and braces.\n\n## Common pitfalls\n\n- **Too few cases.** Five cases tell you almost nothing; one lucky answer swings the score by 20%. Grow the suite every week.\n- **Testing only happy paths.** Include questions your app should refuse or answer with \"I don't know\". Those failures do the most damage.\n- **Trusting the judge blindly.** Read a sample of its verdicts each week. If you disagree with it, fix the rubric.\n- **Ignoring randomness.** Model outputs vary. For important decisions, run the suite twice and look at cases that flip.\n- **Never running it.** Add `python evalkit.py` to your CI pipeline; the non-zero exit code on regressions blocks the merge for you.\n\n## Take it further\n\n- **Track trends.** Plot the pass rate from the `runs/` folder over time.\n- **Compare models or prompts side by side** by running the suite against two versions of `app()`.\n- **Grade more than correctness:** tone, length, or whether every claim has a citation.\n- **Test the other Weekend Builds.** Point EvalKit at Scout, AskDocs or your agent team.\n\n## Resources\n\n- [Anthropic: Define success criteria and build evaluations](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests)\n- [Structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)\n- [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)\n- [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)\n\nTest early, test often. Swagata\n",
+  "visuals": [
+    {
+      "id": "v1",
+      "kind": "photo",
+      "caption": "Every change to an AI app deserves a checklist, not a hunch.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": "engineer testing laptop notes"
+    },
+    {
+      "id": "v2",
+      "kind": "diagram",
+      "caption": "Two graders, one verdict, and an alarm when something that used to pass now fails.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "How EvalKit grades your app",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": [
+        {
+          "id": "cases",
+          "label": "Test cases"
+        },
+        {
+          "id": "app",
+          "label": "Your app"
+        },
+        {
+          "id": "code",
+          "label": "Code checks"
+        },
+        {
+          "id": "judge",
+          "label": "Claude judge"
+        },
+        {
+          "id": "run",
+          "label": "Saved run"
+        },
+        {
+          "id": "cmp",
+          "label": "Compare with last run"
+        }
+      ],
+      "edges": [
+        {
+          "source": "cases",
+          "target": "app",
+          "label": "questions"
+        },
+        {
+          "source": "app",
+          "target": "code",
+          "label": "answers"
+        },
+        {
+          "source": "app",
+          "target": "judge",
+          "label": "answers"
+        },
+        {
+          "source": "code",
+          "target": "run",
+          "label": ""
+        },
+        {
+          "source": "judge",
+          "target": "run",
+          "label": ""
+        },
+        {
+          "source": "run",
+          "target": "cmp",
+          "label": "regressions?"
+        }
+      ],
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v3",
+      "kind": "quote",
+      "caption": "Anthropic's own advice for building evals.",
+      "source_url": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests",
+      "source_name": "Anthropic, Define success criteria and build evaluations",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": "Prioritize volume over quality: More questions with slightly lower signal automated grading is better than fewer questions with high-quality human hand-graded evals.",
+      "quote_author": "Anthropic documentation, building evaluations",
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v4",
+      "kind": "timeline",
+      "caption": "From zero tests to a regression alarm in one weekend.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "Your weekend plan",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": [
+        {
+          "when": "Sat AM",
+          "title": "Write your first test cases",
+          "detail": "Questions, reference answers and must-include words."
+        },
+        {
+          "when": "Sat PM",
+          "title": "Plug in your app and code checks",
+          "detail": "Instant, free, deterministic grading."
+        },
+        {
+          "when": "Sun AM",
+          "title": "Add the Claude judge",
+          "detail": "A strict rubric and a structured verdict for nuanced answers."
+        },
+        {
+          "when": "Sun PM",
+          "title": "Save runs and catch regressions",
+          "detail": "Compare with the last run; fail CI when something breaks."
+        }
+      ],
+      "photo_query": null
+    }
+  ]
+}

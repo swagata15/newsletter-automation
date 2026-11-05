@@ -78,5 +78,13 @@
     "topic": "Build an AI agent that triages your inbox",
     "folder": "issues/weekend-build/2026-12-03-build-an-ai-agent-that-sorts-your-inbox-before-breakfast",
     "status": "local"
+  },
+  {
+    "date": "2026-12-10",
+    "type": "tutorial",
+    "title": "Build a test harness so you know your AI app actually got better",
+    "topic": "Build an evaluation harness to test your LLM app",
+    "folder": "issues/weekend-build/2026-12-10-build-a-test-harness-so-you-know-your-ai-app-actually-got",
+    "status": "local"
   }
 ]

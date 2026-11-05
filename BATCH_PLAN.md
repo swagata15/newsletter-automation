@@ -1,4 +1,6 @@
-# First batch: 11 pre-written issues
+# First batch: 11 pre-written issues (done)
+
+All 11 issues below are written, rendered and saved under `issues/` (see `issues/README.md`).
 
 Written in a Claude Code session (no API credits used), then rendered with the same graphics engine
 and fact checks as the automated pipeline:
