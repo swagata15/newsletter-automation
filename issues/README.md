@@ -23,6 +23,7 @@ Generated automatically. Status: `local` = saved here only, `draft` = Substack d
 
 | Date | Title | Status |
 |---|---|---|
+| 2026-12-17 | [Build your own coding agent from scratch](weekend-build/2026-12-17-build-your-own-coding-agent-from-scratch/issue.md) | local |
 | 2026-12-10 | [Build a test harness so you know your AI app actually got better](weekend-build/2026-12-10-build-a-test-harness-so-you-know-your-ai-app-actually-got/issue.md) | local |
 | 2026-12-03 | [Build an AI agent that sorts your inbox before breakfast](weekend-build/2026-12-03-build-an-ai-agent-that-sorts-your-inbox-before-breakfast/issue.md) | local |
 | 2026-11-26 | [Build a chatbot that answers from your own documents](weekend-build/2026-11-26-build-a-chatbot-that-answers-from-your-own-documents/issue.md) | local |

@@ -482,7 +482,8 @@ def render_diagram(v: Visual, path: Path, t: Theme) -> Path:
     box_w, box_h, gap_x, gap_y = 2.5, 0.8, 0.8, 1.0
     margin = (2.0 + 0.5 * len(loops)) if loops else 0.5
     width = max(widest * (box_w + gap_x) - gap_x + 2 * margin, 9.5)
-    height = len(rows) * (box_h + gap_y) - gap_y + 0.4
+    below = 0.45 if loops else 0.0  # room for loops that run under the bottom row
+    height = len(rows) * (box_h + gap_y) - gap_y + 0.4 + below
     scale = WIDTH_IN * 0.93 / width
     fig_h = height * scale + 2.0
     fig = _new_fig(t, fig_h)
@@ -521,7 +522,14 @@ def render_diagram(v: Visual, path: Path, t: Theme) -> Path:
         lane = right_edge + 0.55 + 0.5 * k if right else left_edge - 0.55 - 0.5 * k
         sa = xa + box_w / 2 if right else xa - box_w / 2
         sb = xb + box_w / 2 if right else xb - box_w / 2
-        (ln,) = ax.plot([sa, lane, lane], [ya, ya, yb], color=t.red_pen, lw=1.7, zorder=1, solid_capstyle="round")
+        blocked = any(abs(py - ya) < 1e-6 and n != a and ((px > xa) if right else (px < xa))
+                      for n, (px, py) in pos.items())
+        if blocked:  # a box sits between the source and the lane: leave from the bottom, run under the row
+            drop = ya - box_h / 2 - 0.35
+            xs_, ys_ = [xa, xa, lane, lane], [ya - box_h / 2, drop, drop, yb]
+        else:  # clear path: leave from the side
+            xs_, ys_ = [sa, lane, lane], [ya, ya, yb]
+        (ln,) = ax.plot(xs_, ys_, color=t.red_pen, lw=1.7, zorder=1, solid_capstyle="round")
         ln.set_sketch_params(scale=1.2, length=50, randomness=20)
         ann = ax.annotate("", xy=(sb, yb), xytext=(lane, yb), arrowprops={**arrow, "color": t.red_pen, "lw": 1.7})
         ann.arrow_patch.set_sketch_params(scale=1.2, length=50, randomness=20)

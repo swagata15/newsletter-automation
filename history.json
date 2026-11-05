@@ -94,5 +94,13 @@
     "topic": "Sycophancy: AI that always agrees, and what it does to our judgment",
     "folder": "issues/ai-and-the-mind/2026-12-15-your-ai-agrees-with-you-too-much-that-s-a-problem",
     "status": "local"
+  },
+  {
+    "date": "2026-12-17",
+    "type": "tutorial",
+    "title": "Build your own coding agent from scratch",
+    "topic": "Build a coding agent from scratch",
+    "folder": "issues/weekend-build/2026-12-17-build-your-own-coding-agent-from-scratch",
+    "status": "local"
   }
 ]

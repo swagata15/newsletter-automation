@@ -1,0 +1,192 @@
+{
+  "title": "Build your own coding agent from scratch",
+  "subtitle": "MiniCoder reads your code, edits it, runs the tests and tries again, with guardrails built in. About 120 lines.",
+  "topic": "Build a coding agent from scratch",
+  "cover_highlight": "coding agent",
+  "cover_photo_query": "code on computer screen dark",
+  "markdown": "Coding agents like Claude Code and Cursor feel like magic. Underneath, the core is surprisingly small: a loop where the model looks at files, edits them, runs the tests, reads the results and tries again. This weekend you'll build that loop yourself.\n\n**MiniCoder** is about 120 lines of Python. You give it a task, like \"make all the tests pass\" or \"add input validation to the signup function\", and it reads your project, makes careful edits, runs your test suite, and keeps going until the tests pass or it gives up. By Sunday you'll understand exactly how the big tools work, and where they can go wrong.\n\n[[VISUAL:v1]]\n\n## What you'll build\n\nMiniCoder gives Claude two tools and a loop:\n\n1. **A text editor** to view files and make precise edits. This is a built-in Anthropic tool: Claude already knows how to use it; your code just carries out the actions.\n2. **A test runner** that runs your project's tests with pytest and returns the output.\n3. **The loop:** call Claude, run whatever tools it asks for, send the results back, repeat, until it says it's done or hits a step limit.\n\n[[VISUAL:v2]]\n\nThe interesting engineering isn't the loop. It's the guardrails: an agent that can edit files is an agent that can edit the *wrong* files. We'll build three safety rails in from the start.\n\n## Before you start\n\nYou need Python 3.10+, a Claude API key from the [Claude Console](https://platform.claude.com), and a small Python project with tests. (No project? Make one with a deliberately broken function and a test for it.)\n\n```bash\nmkdir minicoder && cd minicoder\npython -m venv .venv && source .venv/bin/activate\npip install anthropic pytest\nexport ANTHROPIC_API_KEY=\"your-key-here\"\n```\n\n**Always run it on a copy of your project, or a folder under git,** so you can see and undo every change with `git diff`.\n\n**Cost.** MiniCoder runs on Claude Sonnet 5.5 ($2 per million input tokens, $10 per million output; [pricing](https://platform.claude.com/docs/en/about-claude/pricing)). Each step resends the conversation, so long tasks add up; a small bug fix typically takes a handful of steps and costs cents. The 30-step cap protects you from runaway bills.\n\n## Saturday: tools with guardrails\n\n### Step 1: Declare the tools\n\nCreate `minicoder.py` and start with the setup:\n\n```python\n\"\"\"MiniCoder: a small coding agent that reads, edits and tests code in one project folder.\"\"\"\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nimport anthropic\n\nMODEL = \"claude-sonnet-5-5\"\nMAX_STEPS = 30  # hard cap on tool calls per task\nclient = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY\n\nTOOLS = [\n    {\"type\": \"text_editor_20250728\", \"name\": \"str_replace_based_edit_tool\"},  # built-in: Claude knows how to use it\n    {\"name\": \"run_tests\", \"description\": \"Run the project's test suite with pytest and return the output.\",\n     \"input_schema\": {\"type\": \"object\", \"properties\": {}, \"additionalProperties\": False}},\n]\n\nSYSTEM = \"\"\"You are a careful software engineer working in a single project folder.\nWorkflow: look at the relevant files, make the smallest change that solves the task, then run the\ntests. If tests fail, read the output, fix the cause, and run them again. Finish with a short\nsummary of what you changed and the final test result. Never edit test files to make them pass.\"\"\"\n```\n\nThe text editor is declared with just a `type` and `name`, with no schema: it's an [Anthropic-defined tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool) that Claude is trained to use. The test runner is our own tool, with an empty schema because it takes no arguments.\n\nNotice what's missing: a general shell. It would be easy to give the agent a terminal and let it run anything. Anthropic's guidance is to treat every command as untrusted and use an allowlist, and the tightest allowlist is one command. If MiniCoder needs to run tests, it gets a button that runs tests. Nothing else.\n\n### Step 2: Implement the tools safely\n\nNow the code that actually touches your files:\n\n```python\n# ---- The tools, implemented on your machine --------------------------------------------------------\nclass Workspace:\n    def __init__(self, root: str):\n        self.root = Path(root).resolve()\n        self.changed: set[str] = set()\n\n    def safe_path(self, path: str) -> Path:\n        \"\"\"Resolve a model-supplied path and refuse anything outside the project folder.\"\"\"\n        p = (self.root / path.lstrip(\"/\")).resolve()\n        if not p.is_relative_to(self.root):\n            raise ValueError(f\"{path} is outside the project folder\")\n        return p\n\n    def edit(self, args: dict) -> str:\n        cmd, p = args[\"command\"], self.safe_path(args[\"path\"])\n        if cmd == \"view\":\n            if p.is_dir():\n                return \"\\n\".join(sorted(str(f.relative_to(self.root)) for f in p.rglob(\"*\")\n                                        if f.is_file() and \".git\" not in f.parts and \"__pycache__\" not in f.parts))\n            lines = p.read_text().splitlines()\n            start, end = (args.get(\"view_range\") or [1, len(lines)])\n            end = len(lines) if end == -1 else end\n            return \"\\n\".join(f\"{i}: {lines[i - 1]}\" for i in range(start, end + 1))\n        if p.name.startswith(\"test_\"):\n            raise ValueError(\"test files are read-only\")\n        if cmd == \"create\":\n            p.parent.mkdir(parents=True, exist_ok=True)\n            p.write_text(args[\"file_text\"])\n        elif cmd == \"str_replace\":\n            text = p.read_text()\n            count = text.count(args[\"old_str\"])\n            if count != 1:\n                raise ValueError(f\"old_str must match exactly once, found {count} matches\")\n            p.write_text(text.replace(args[\"old_str\"], args.get(\"new_str\", \"\")))\n        elif cmd == \"insert\":\n            lines = p.read_text().splitlines(keepends=True)\n            lines.insert(args[\"insert_line\"], args[\"insert_text\"].rstrip(\"\\n\") + \"\\n\")\n            p.write_text(\"\".join(lines))\n        else:\n            raise ValueError(f\"unknown command {cmd}\")\n        self.changed.add(str(p.relative_to(self.root)))\n        return f\"{cmd} ok: {args['path']}\"\n\n    def run_tests(self) -> str:\n        result = subprocess.run([sys.executable, \"-m\", \"pytest\", \"-q\", \"--no-header\"], cwd=self.root,\n                                capture_output=True, text=True, timeout=120)\n        return (result.stdout + result.stderr)[-6000:] or \"(no output)\"\n```\n\n[[VISUAL:v3]]\n\nThree guardrails live here:\n\n- **Stay in the folder.** `safe_path` resolves every path the model gives and refuses anything outside the project. A request for `../../../etc/passwd` gets an error, not a file.\n- **Exact edits only.** `str_replace` must match exactly one place in the file. If the text appears zero times or twice, it fails and Claude has to look again. This one rule prevents most accidental damage.\n- **Tests are off limits.** An agent told to \"make the tests pass\" will sometimes take the shortcut of changing the tests. Making test files read-only removes the temptation entirely.\n\n**Check before moving on:** in a Python shell, `import minicoder; ws = minicoder.Workspace(\".\"); print(ws.edit({\"command\": \"view\", \"path\": \".\"}))` should list your files, and `ws.edit({\"command\": \"view\", \"path\": \"../..\"})` should raise an error.\n\n## Sunday: the agent loop\n\n### Step 3: Write the loop\n\nThis is the whole agent:\n\n```python\n# ---- The agent loop ---------------------------------------------------------------------------------\ndef solve(task: str, root: str = \".\") -> str:\n    ws = Workspace(root)\n    messages = [{\"role\": \"user\", \"content\": task}]\n    for step in range(MAX_STEPS):\n        response = client.messages.create(\n            model=MODEL, max_tokens=16000, system=SYSTEM, tools=TOOLS, messages=messages,\n            thinking={\"type\": \"adaptive\"}, output_config={\"effort\": \"medium\"},\n        )\n        messages.append({\"role\": \"assistant\", \"content\": response.content})\n        if response.stop_reason != \"tool_use\":\n            print(f\"\\nChanged files: {', '.join(sorted(ws.changed)) or 'none'}\")\n            return \"\".join(b.text for b in response.content if b.type == \"text\")\n\n        results = []\n        for block in response.content:\n            if block.type != \"tool_use\":\n                continue\n            try:\n                output = ws.run_tests() if block.name == \"run_tests\" else ws.edit(block.input)\n                results.append({\"type\": \"tool_result\", \"tool_use_id\": block.id, \"content\": output})\n            except Exception as exc:  # tell Claude what went wrong so it can recover\n                results.append({\"type\": \"tool_result\", \"tool_use_id\": block.id, \"content\": str(exc), \"is_error\": True})\n            print(f\"  [{step + 1}] {block.name} {block.input.get('command', '')} {block.input.get('path', '')}\")\n        messages.append({\"role\": \"user\", \"content\": results})  # all results go back in one message\n    return f\"Stopped after {MAX_STEPS} steps without finishing.\"\n\n\nif __name__ == \"__main__\":\n    print(solve(\" \".join(sys.argv[1:]) or \"Make all the tests pass.\"))\n```\n\nRead it slowly, because every coding agent has this shape:\n\n1. Send the conversation and the tools to Claude.\n2. If Claude's answer ends with `tool_use`, run each requested tool and collect the results.\n3. Send **all** the results back together in one message, then go around again.\n4. When Claude stops asking for tools, it's done: print what changed and its summary.\n\nTwo details matter. When a tool fails, we don't crash: we send the error back with `is_error: True`, and Claude reads it and adapts, just like a person reading an error message. And `MAX_STEPS` guarantees the loop ends, even if the model gets stuck.\n\n### Step 4: Run it\n\n```bash\npython minicoder.py \"Make all the tests pass.\"\npython minicoder.py \"Add a function that returns the median of a list, with tests.\"\n```\n\nYou'll see each step as it happens (view, edit, run tests), then the list of changed files and Claude's summary. Check the result with `git diff` before you keep anything.\n\nWhen I tested it on a tiny project with a broken `average()` function, the run went exactly as designed: it listed the files, was refused when it tried to read outside the folder, was refused when it tried to edit the test, fixed the real bug, and watched the tests go from failing to passing.\n\n[[VISUAL:v4]]\n\n## Common pitfalls\n\n- **Giving it a full shell.** It's tempting. Don't, unless it runs in a container you're happy to throw away.\n- **Running it on your only copy.** Use git, every time.\n- **Vague tasks.** \"Improve the code\" invites sprawling edits. \"Fix the failing test in test_stats.py\" gets a tight change.\n- **No tests at all.** Without tests the agent can't check its own work, and neither can you. Write one test for the behaviour you want first.\n- **Letting it loop forever.** Keep the step cap. If it can't solve a task in 30 steps, it's usually confused about the task, not one step away from success.\n\n## Take it further\n\n- **Show diffs before applying.** Print each proposed edit and ask \"apply? (y/n)\" for a human in the loop.\n- **Add a search tool** that runs a fixed `grep` so it can find code in bigger projects.\n- **Run it in a container** so you can safely allow more commands, like installing packages.\n- **Test the tester.** Use last week's EvalKit to measure how often MiniCoder solves a set of known bugs.\n\n## Resources\n\n- [Text editor tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool)\n- [Tool use overview](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview)\n- [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)\n- [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)\n\nHappy hacking, and tell me the first bug it fixes for you. Swagata\n",
+  "visuals": [
+    {
+      "id": "v1",
+      "kind": "photo",
+      "caption": "The loop behind every coding agent is smaller than you'd think.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": "programmer keyboard monitor night"
+    },
+    {
+      "id": "v2",
+      "kind": "diagram",
+      "caption": "Claude decides; your code acts. The loop repeats until the tests pass or the step cap is hit.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "The coding agent loop",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": [
+        {
+          "id": "task",
+          "label": "Your task"
+        },
+        {
+          "id": "claude",
+          "label": "Claude decides next step"
+        },
+        {
+          "id": "edit",
+          "label": "View or edit files"
+        },
+        {
+          "id": "test",
+          "label": "Run tests"
+        },
+        {
+          "id": "done",
+          "label": "Summary + changed files"
+        }
+      ],
+      "edges": [
+        {
+          "source": "task",
+          "target": "claude",
+          "label": ""
+        },
+        {
+          "source": "claude",
+          "target": "edit",
+          "label": "tool_use"
+        },
+        {
+          "source": "claude",
+          "target": "test",
+          "label": "tool_use"
+        },
+        {
+          "source": "edit",
+          "target": "claude",
+          "label": "result"
+        },
+        {
+          "source": "test",
+          "target": "claude",
+          "label": "output"
+        },
+        {
+          "source": "claude",
+          "target": "done",
+          "label": "finished"
+        }
+      ],
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v3",
+      "kind": "stat",
+      "caption": "Three guardrails that make it safe to point at real code.",
+      "source_url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool",
+      "source_name": "Anthropic text editor tool docs",
+      "chart_type": null,
+      "chart_title": "MiniCoder's guardrails",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": [
+        {
+          "value": "0",
+          "label": "files it can touch outside your project folder"
+        },
+        {
+          "value": "1",
+          "label": "exact match required for every edit, or it fails"
+        },
+        {
+          "value": "30",
+          "label": "steps at most before the loop stops"
+        }
+      ],
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v4",
+      "kind": "timeline",
+      "caption": "A working coding agent in two days.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "Your weekend plan",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": [
+        {
+          "when": "Sat AM",
+          "title": "Declare the tools",
+          "detail": "The built-in text editor plus a single test-runner button."
+        },
+        {
+          "when": "Sat PM",
+          "title": "Implement them safely",
+          "detail": "Path confinement, exact edits, read-only tests."
+        },
+        {
+          "when": "Sun AM",
+          "title": "Write the agent loop",
+          "detail": "Call, run tools, send results back, repeat."
+        },
+        {
+          "when": "Sun PM",
+          "title": "Run it on a real bug",
+          "detail": "Watch failing tests turn green, then check git diff."
+        }
+      ],
+      "photo_query": null
+    }
+  ]
+}
