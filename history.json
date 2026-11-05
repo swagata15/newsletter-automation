@@ -22,5 +22,13 @@
     "topic": "Build a multi-agent orchestration system in a weekend",
     "folder": "issues/weekend-build/2026-11-12-build-a-team-of-ai-agents-that-checks-its-own-work",
     "status": "local"
+  },
+  {
+    "date": "2026-11-17",
+    "type": "psychology",
+    "title": "Is AI making us worse at thinking? What the evidence says",
+    "topic": "Does using AI make us worse at thinking? Cognitive offloading and critical thinking",
+    "folder": "issues/ai-and-the-mind/2026-11-17-is-ai-making-us-worse-at-thinking-what-the-evidence-says",
+    "status": "local"
   }
 ]

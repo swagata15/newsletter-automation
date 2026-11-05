@@ -12,6 +12,7 @@ Generated automatically. Status: `local` = saved here only, `draft` = Substack d
 
 | Date | Title | Status |
 |---|---|---|
+| 2026-11-17 | [Is AI making us worse at thinking? What the evidence says](ai-and-the-mind/2026-11-17-is-ai-making-us-worse-at-thinking-what-the-evidence-says/issue.md) | local |
 | 2026-11-10 | [Is AI making us lonely? What the research actually says](ai-and-the-mind/2026-11-10-is-ai-making-us-lonely-what-the-research-actually-says/issue.md) | local |
 
 ## Weekend Build

@@ -33,9 +33,11 @@ class Photo:
 def _download(url: str, dest_stem: Path) -> Path:
     img = requests.get(url, headers=UA, timeout=30)
     img.raise_for_status()
-    if not img.headers.get("content-type", "").startswith("image/") or len(img.content) < 20_000:
+    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(
+        img.headers.get("content-type", "").split(";")[0].strip())
+    if not ext or len(img.content) < 20_000:  # GIFs, SVGs, icons and tiny thumbnails are skipped
         raise ValueError("not a usable photo")
-    path = dest_stem.with_suffix(".jpg" if "jpeg" in img.headers["content-type"] else ".png")
+    path = dest_stem.with_suffix(ext)
     path.write_bytes(img.content)
     return path
 
@@ -158,7 +160,10 @@ if __name__ == "__main__":  # python -m newsletter.photos "query" out_dir  -> co
         for ax in axs.flat:
             ax.axis("off")
         for ax, f in zip(axs.flat, found):
-            ax.imshow(plt.imread(f["path"]))
+            try:
+                ax.imshow(plt.imread(f["path"]))
+            except Exception:
+                continue
             ax.set_title(f"#{f['i']}", fontsize=14)
         fig.savefig(out / "contact.png", dpi=60, bbox_inches="tight")
     print(f"{len(found)} candidates -> {out / 'contact.png'}")
