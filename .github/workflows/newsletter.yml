@@ -9,10 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       type:
-        description: "Which issue to generate"
+        description: "Which category (all = one batch per category)"
         type: choice
-        options: [auto, weekly, psychology, tutorial]
+        options: [auto, all, weekly, psychology, tutorial]
         default: auto
+      count:
+        description: "How many issues per category (bulk). Topics come from config.yaml backlogs."
+        default: "1"
       topic:
         description: "Optional topic override (psychology / tutorial)"
         required: false
@@ -32,7 +35,7 @@ concurrency:
 jobs:
   newsletter:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,21 +50,17 @@ jobs:
           SUBSTACK_COOKIES: ${{ secrets.SUBSTACK_COOKIES }}
           SUBSTACK_EMAIL: ${{ secrets.SUBSTACK_EMAIL }}
           SUBSTACK_PASSWORD: ${{ secrets.SUBSTACK_PASSWORD }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_TYPE: ${{ inputs.type || 'auto' }}
           ISSUE_TOPIC: ${{ inputs.topic }}
+          ISSUE_COUNT: ${{ inputs.count || '1' }}
           PUBLISH_MODE: ${{ inputs.mode || vars.PUBLISH_MODE || 'draft' }}
         run: python -m newsletter
-      - name: Save the issue, charts and research notes
+      - name: Save issues to the repo (issues/<category>/...) and record topics
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: newsletter-${{ github.run_id }}
-          path: output/
-          if-no-files-found: ignore
-      - name: Record topic in history.json
         run: |
           git config user.name "newsletter-bot"
           git config user.email "newsletter-bot@users.noreply.github.com"
-          git add history.json
-          git diff --cached --quiet || (git commit -m "Record newsletter topic" && git push)
+          git add history.json issues/
+          git diff --cached --quiet || (git commit -m "Add newsletter issue(s)" && git push)

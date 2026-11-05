@@ -4,12 +4,31 @@ from __future__ import annotations
 
 from .style import STYLE_GUIDE
 
-VISUALS_GUIDE = """Visuals:
-- Put each visual on its own line in the markdown as [[VISUAL:<id>]] and describe it in `visuals`.
-- kind "image": source_url is the web page whose preview image represents the story (the article, GitHub repo page, or Hugging Face/arXiv paper page). Pick the most original source.
-- kind "chart": ONLY use numbers that appear verbatim in the research notes, and set source_url to the exact page they came from. Never estimate, round creatively, combine incompatible studies in one chart, or invent data. 3 to 8 categories. Keep chart_title a plain statement of the finding (e.g. "Heavy chatbot users report more loneliness").
-- kind "diagram": give nodes (short labels) and edges (arrows). 4 to 9 nodes. Set source_url and source_name to empty strings.
-- Captions are one plain sentence. Every chart caption should say what the reader should notice."""
+VISUALS_GUIDE = """Visuals (our house style is "the marked-up printout": grey-first data, one highlighted value,
+one handwritten red-pen note, real photos). Put each visual on its own line as [[VISUAL:<id>]] and describe it
+in `visuals`. Every data visual must use ONLY numbers or words that appear in the research notes, with
+source_url set to the exact page they came from; anything that can't be traced is dropped automatically.
+
+Kinds:
+- "stat": 1-3 big headline numbers with a one-line label each (stats). Great as an opener.
+- "chart": bar, hbar (long labels), grouped_bar or line; 3-8 categories; one source per chart. Set
+  `highlight` to the one category that makes the point (others turn grey) and `annotation` to a short,
+  human margin note about it (max 12 words, e.g. "Double the non-users"). chart_title states the finding.
+- "waffle": a percentage shown as 100 people (waffle_value 0-100, waffle_label says who they are).
+  Use for the single most human statistic in the piece.
+- "quote": a striking sentence from a researcher or source, copied word for word from the notes
+  (quote_text), with quote_author "Name, role or affiliation".
+- "timeline": 3-8 dated steps or events (when, title, detail).
+- "diagram": nodes (short labels) and edges (arrows) for architectures and flows; 4-9 nodes. Feedback
+  loops are drawn in red pen automatically.
+- "photo": a real stock photo; photo_query is a concrete, literal scene ("two friends laughing at a
+  kitchen table", "developer at a desk at night with two monitors"). No robots, glowing brains or
+  abstract "AI" imagery.
+- "image": the source's own preview image; source_url is the article, GitHub repo or paper page.
+
+Also set cover_photo_query (same rules as photo) and cover_highlight (2-4 consecutive words copied exactly
+from the title that carry its punch; they get the highlighter on the cover).
+Captions are one plain sentence that tells the reader what to notice."""
 
 RESEARCH_SYSTEM = """You are the research desk for an AI newsletter. You search the web, open primary sources, and
 produce accurate research notes for the writer. Accuracy beats coverage: if you cannot verify something
@@ -69,8 +88,9 @@ Structure:
 - `## Also worth a look`: 3-5 one-line bullets with links for the runners up.
 - A one-line sign-off.
 
-If the notes include solid numbers that compare items (e.g. GitHub stars, benchmark scores from one
-source), you may add ONE chart; otherwise images only.
+Visual mix: an "image" for each of the top items, plus ONE "timeline" near the top showing the week's
+key moments by day (only dates in the notes), plus ONE "stat" card or "chart" if the notes have solid
+comparable numbers (e.g. GitHub stars, benchmark scores from one source).
 
 Research notes:
 {notes}"""
@@ -96,6 +116,8 @@ A. Up to 15 sources. For each: full citation (authors, year, title, journal or p
 B. 3-5 chart-ready datasets: a short title, the exact numbers (categories and values, with units), and
    the exact source URL. Only numbers you saw in the source. Each dataset must come from a single source.
 C. The 5 strongest, most surprising findings.
+C2. 2-4 short verbatim quotes from researchers or reports (exact words in quotation marks, with who said
+   it and the URL). Copy them exactly; do not paraphrase.
 D. Where the evidence is weak, mixed or missing.
 E. Practical, evidence-based takeaways for ordinary readers."""
 
@@ -123,8 +145,13 @@ Structure (adapt headings to the topic, keep them specific, not generic):
 Citations: cite inline as ([Author et al., Year](url)) the first time, and keep it natural after that.
 Every number in the article must come from the notes and be attributable to a reference.
 
-Include 3 or 4 charts built from the chart-ready datasets (kind "chart"), placed next to the paragraph
-that discusses them. Do not mix data from different studies in one chart.
+Visual mix (this is the most visual issue of the week, aim for 7-9 visuals spread through the piece):
+- open with a "stat" card of the 2-3 most striking numbers
+- 3-4 "chart"s from the chart-ready datasets, each with highlight + annotation, placed next to the
+  paragraph that discusses them (never mix studies in one chart)
+- one "waffle" for the most human percentage
+- one "quote" from a researcher, word for word from the notes
+- 1-2 "photo"s of real, everyday scenes that fit the topic, used as section breaks
 
 Research notes:
 {notes}"""
@@ -169,7 +196,9 @@ Code rules: complete, runnable, consistent across steps (same file and function 
 APIs, package names and model names verified in the notes. Keep files small. Use fenced code blocks
 with a language tag. Code may contain any characters it needs; the no-dash rule applies to prose only.
 
-You may add a second diagram (e.g. the agent message flow) if it genuinely helps.
+Visual mix: the architecture "diagram"; a "timeline" of the weekend plan (Sat AM, Sat PM, Sun AM,
+Sun PM); one "photo" of a realistic build setting near the top; and a second diagram (e.g. the message
+flow) or a "stat"/"chart" (e.g. cost per run, only from the notes) if it genuinely helps.
 
 Research notes:
 {notes}"""

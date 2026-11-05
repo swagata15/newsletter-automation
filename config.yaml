@@ -5,7 +5,20 @@ newsletter:
   name: "My AI Newsletter"
   audience: "builders, founders and curious professionals who want to understand AI without the hype"
   voice: "a sharp, warm human writer: plain words, concrete specifics, honest opinions, occasional dry humour"
-  accent_color: "#A63A2B"  # brick red; used for kickers, rules and the 2nd chart series
+
+# Brand kit (see BRAND.md). Every graphic is drawn from these tokens.
+brand:
+  paper: "#F4EFE6"
+  card: "#FBF8F2"
+  ink: "#161616"
+  primary: "#1B3A5C"      # ink navy: the data colour
+  pencil: "#BDB4A5"       # context data
+  graphite: "#6A645B"     # secondary text
+  rule: "#D9D0C1"
+  highlighter: "#F5D547"
+  red_pen: "#C23B22"
+  series: ["#1B3A5C", "#3A7D7C", "#C9973B", "#6A3B5A"]
+  duotone_photos: true    # re-ink every photo in the series colour
 
 # Which issue goes out on which day (UTC). Used when --type auto (the default).
 schedule:
@@ -16,6 +29,7 @@ schedule:
 issues:
   weekly:
     label: "This Week in AI"
+    color: "#1B3A5C"
     num_items: 6              # pick the top 5-6 things
     lookback_days: 7
     effort: high
@@ -25,6 +39,7 @@ issues:
 
   psychology:
     label: "AI and the Mind"
+    color: "#6A3B5A"
     target_words: 3000
     effort: high
     research_effort: xhigh    # this is the heavily researched, data-driven one
@@ -42,6 +57,7 @@ issues:
 
   tutorial:
     label: "Weekend Build"
+    color: "#2E5E4E"
     target_words: 2500
     effort: high
     max_searches: 15

@@ -1,7 +1,7 @@
-"""Turn Visual specs into image files: charts, diagrams, source images and a cover.
+"""The graphics desk: every visual in the newsletter, drawn to the brand kit in BRAND.md.
 
-Look: newspaper graphics desk. Warm newsprint background, ink-black type, a muted
-news palette, Roboto Slab headlines and Roboto labels (bundled in ./fonts).
+Concept: "the marked-up printout". Ink on newsprint, grey-first data, one highlighter
+swipe on what matters, one red-pen margin note, a coloured section tab, duotone photos.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import textwrap
+from dataclasses import dataclass, field
 from datetime import date
 from html import unescape
 from pathlib import Path
@@ -18,139 +19,395 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 import requests  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
-from matplotlib.patches import FancyBboxPatch, Rectangle  # noqa: E402
+from matplotlib.colors import to_rgb  # noqa: E402
+from matplotlib.patches import Circle, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
 
 from .models import Visual  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------- theme
-PAPER = "#F5F0E6"      # newsprint
-CARD = "#FFFDF8"       # box fill on diagrams
-INK = "#1A1A1A"
-MUTED = "#5E5850"
-RULE = "#D6CCBA"
-NEWS_PALETTE = ["#1F3B57", "#A63A2B", "#2C6E6A", "#B98A2F", "#6E7B88", "#5E4A6B"]  # navy, brick, teal, ochre, slate, plum
-
+# ---------------------------------------------------------------- fonts
 FONT_DIR = Path(__file__).parent / "fonts"
 for _f in FONT_DIR.glob("*.ttf"):
     font_manager.fontManager.addfont(str(_f))
-SANS, SLAB = "Roboto", "Roboto Slab"
-plt.rcParams.update({
-    "font.family": SANS, "font.size": 11, "text.color": INK,
-    "axes.edgecolor": RULE, "axes.labelcolor": MUTED, "xtick.color": INK, "ytick.color": INK,
-    "axes.facecolor": PAPER, "figure.facecolor": PAPER, "savefig.facecolor": PAPER,
-})
+SANS, SLAB, COND, MONO, HAND = "Roboto", "Roboto Slab", "Roboto Condensed", "Roboto Mono", "Caveat"
+plt.rcParams.update({"font.family": SANS, "font.size": 11, "axes.unicode_minus": False})
 
+WIDTH_IN, DPI = 10.0, 150  # 1500 px wide, crisp in Substack's 728 px column on retina screens
 UA = {"User-Agent": "Mozilla/5.0 (compatible; newsletter-automation/1.0)"}
 IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
 
 
-def _palette(accent: str) -> list[str]:
-    # navy leads; the configured accent (default brick red) is the second series colour
-    rest = [c for c in NEWS_PALETTE if c.lower() != accent.lower()]
-    return [rest[0], accent] + rest[1:]
+@dataclass
+class Theme:
+    newsletter: str = "My AI Newsletter"
+    section: str = "This Week in AI"
+    section_color: str = "#1B3A5C"
+    paper: str = "#F4EFE6"
+    card: str = "#FBF8F2"
+    ink: str = "#161616"
+    primary: str = "#1B3A5C"
+    pencil: str = "#BDB4A5"
+    graphite: str = "#6A645B"
+    rule: str = "#D9D0C1"
+    highlighter: str = "#F5D547"
+    red_pen: str = "#C23B22"
+    series: list[str] = field(default_factory=lambda: ["#1B3A5C", "#3A7D7C", "#C9973B", "#6A3B5A"])
+    duotone_photos: bool = True
+
+    @classmethod
+    def from_config(cls, config: dict, kind: str) -> "Theme":
+        brand = {k: v for k, v in (config.get("brand") or {}).items() if k in cls.__dataclass_fields__}
+        issue = config["issues"][kind]
+        return cls(newsletter=config["newsletter"]["name"], section=issue.get("label", kind),
+                   section_color=issue.get("color", brand.get("primary", "#1B3A5C")), **brand)
+
+
+# ---------------------------------------------------------------- shared devices
+def _new_fig(t: Theme, height_in: float):
+    fig = plt.figure(figsize=(WIDTH_IN, height_in), dpi=DPI)
+    fig.patch.set_facecolor(t.paper)
+    _grain(fig, t)
+    return fig
+
+
+def _grain(fig, t: Theme) -> None:
+    """Very faint paper grain so graphics feel printed, not rendered."""
+    w, h = int(fig.get_figwidth() * DPI), int(fig.get_figheight() * DPI)
+    rng = np.random.default_rng(7)
+    base = np.array(to_rgb(t.paper))
+    noise = rng.normal(0, 0.012, (h, w, 1))
+    fig.figimage(np.clip(base + noise, 0, 1), xo=0, yo=0, zorder=-10, origin="upper")
+
+
+def _text_box(fig, artist):
+    """Bounding box of a drawn text artist, in figure fraction coordinates."""
+    r = fig.canvas.get_renderer()
+    return artist.get_window_extent(renderer=r).transformed(fig.transFigure.inverted())
+
+
+def _highlight(fig, t: Theme, x0, y0, x1, y1, seed=1, ax=None) -> None:
+    """A slightly uneven highlighter stroke (figure coordinates), drawn behind text."""
+    rng = np.random.default_rng(seed)
+    h = y1 - y0
+    x0, x1, y0, y1 = x0 - 0.006, x1 + 0.006, y0 + h * 0.06, y1 - h * 0.1
+    n = 8
+    xs = np.linspace(x0, x1, n)
+    top = y1 + rng.normal(0, h * 0.04, n)
+    bot = y0 + rng.normal(0, h * 0.04, n)
+    pts = list(zip(xs, top)) + [(x1 + 0.004, (y0 + y1) / 2)] + list(zip(xs[::-1], bot[::-1])) + [(x0 - 0.003, (y0 + y1) / 2)]
+    poly = Polygon(pts, closed=True, transform=fig.transFigure, fc=t.highlighter, ec="none", alpha=0.85,
+                   zorder=3.5 if ax is not None else 0.5, clip_on=False)
+    (ax.add_artist if ax is not None else fig.add_artist)(poly)
+
+
+def _highlight_text(fig, t: Theme, artist, seed=1, ax=None) -> None:
+    bb = _text_box(fig, artist)
+    _highlight(fig, t, bb.x0, bb.y0, bb.x1, bb.y1, seed, ax)
+
+
+def _tab(fig, t: Theme, x=0.035, y=0.93) -> float:
+    """Coloured index tab with the series name. Returns the y just below it."""
+    txt = fig.text(x + 0.012, y, t.section.upper(), fontfamily=COND, fontweight="bold", fontsize=10.5,
+                   color="white", va="center", zorder=3)
+    bb = _text_box(fig, txt)
+    pad_y = 0.09 / fig.get_figheight()
+    fig.add_artist(Rectangle((x, bb.y0 - pad_y), bb.width + 0.024, bb.height + 2 * pad_y,
+                             transform=fig.transFigure, fc=t.section_color, ec="none", zorder=2))
+    return bb.y0 - pad_y - 0.22 / fig.get_figheight()
+
+
+def _headline(fig, t: Theme, title: str, y: float, subtitle: str | None = None, width=58, size=19) -> float:
+    lines = textwrap.wrap(title, width)
+    txt = fig.text(0.035, y, "\n".join(lines), fontfamily=SLAB, fontweight="bold", fontsize=size,
+                   color=t.ink, va="top", linespacing=1.15)
+    y = _text_box(fig, txt).y0 - 0.12 / fig.get_figheight()
+    if subtitle:
+        s = fig.text(0.035, y, subtitle, fontsize=12, color=t.graphite, va="top")
+        y = _text_box(fig, s).y0 - 0.15 / fig.get_figheight()
+    return y
+
+
+def _source_line(fig, t: Theme, name: str, url: str = "") -> None:
+    fh = fig.get_figheight()
+    fig.add_artist(Rectangle((0.035, 0.42 / fh), 0.93, 0.008 / fh, transform=fig.transFigure, color=t.rule, lw=0))
+    dom = urlparse(url).netloc.removeprefix("www.") if url else ""
+    bits = [b for b in (name, dom) if b]
+    if bits:
+        fig.text(0.035, 0.2 / fh, "SOURCE · " + " · ".join(bits), fontfamily=MONO, fontweight="medium", fontsize=8.5, color=t.graphite)
+    fig.text(0.965, 0.2 / fh, t.newsletter.upper(), fontfamily=COND, fontweight="bold", fontsize=9,
+             color=t.graphite, ha="right")
+
+
+def _pen_note(ax, t: Theme, text: str, target, dx=0.0, dy=0.0, rad=-0.3, text_pos=None):
+    """Handwritten red-pen margin note with a hand-drawn arrow to `target` (data coords).
+
+    The note sits at an offset (dx, dy, in axes fractions) from the target, kept inside the plot."""
+    if text_pos is None:
+        tx, ty = ax.transAxes.inverted().transform(ax.transData.transform(target))
+        text_pos = (min(max(tx + dx, 0.14), 0.86), min(max(ty + dy, 0.1), 0.92))
+    ann = ax.annotate(
+        textwrap.fill(text, 22), xy=target, xycoords="data", xytext=text_pos, textcoords="axes fraction",
+        fontfamily=HAND, fontweight="bold", fontsize=18, color=t.red_pen, ha="center", va="center",
+        linespacing=0.95, zorder=6, annotation_clip=False,
+        arrowprops=dict(arrowstyle="-|>,head_length=0.6,head_width=0.3", color=t.red_pen, lw=1.8,
+                        connectionstyle=f"arc3,rad={rad}", shrinkA=10, shrinkB=8),
+    )
+    ann.arrow_patch.set_sketch_params(scale=0.9, length=80, randomness=8)
+    return ann
 
 
 def _fmt(v: float, unit: str | None) -> str:
     s = f"{v:,.0f}" if abs(v) >= 100 or float(v).is_integer() else f"{v:,.1f}"
-    return f"{s}{unit or ''}" if unit and len(unit) <= 2 else s
+    return f"{s}{unit}" if unit and len(unit) <= 2 else s
 
 
-def _domain(url: str) -> str:
-    return urlparse(url).netloc.removeprefix("www.")
+def _fade(hex_colour: str, t: Theme, amount=0.6) -> tuple:
+    c, p = np.array(to_rgb(hex_colour)), np.array(to_rgb(t.paper))
+    return tuple(c * (1 - amount) + p * amount)
 
 
-def _header(fig, title: str, subtitle: str | None, accent: str) -> float:
-    """Newspaper chart header: short accent rule, slab headline, sans dek. Returns y below it."""
-    fig.add_artist(Rectangle((0.025, 0.955), 0.06, 0.012, transform=fig.transFigure, color=accent, lw=0))
-    lines = textwrap.wrap(title, 62)
-    fig.text(0.025, 0.93, "\n".join(lines), fontfamily=SLAB, fontweight="bold", fontsize=17, color=INK,
-             va="top", linespacing=1.2)
-    y = 0.93 - 0.068 * len(lines)
-    if subtitle:
-        fig.text(0.025, y, subtitle, fontsize=11.5, color=MUTED, va="top")
-        y -= 0.06
-    return y
-
-
-def _footer(fig, v: Visual) -> None:
-    fig.add_artist(Rectangle((0.025, 0.06), 0.95, 0.0015, transform=fig.transFigure, color=RULE, lw=0))
-    credit = f"Source: {v.source_name}" + (f", {_domain(v.source_url)}" if v.source_url else "")
-    fig.text(0.025, 0.025, credit, fontsize=9.5, color=MUTED)
+def _save(fig, path: Path) -> Path:
+    fig.savefig(path, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return path
 
 
 # ---------------------------------------------------------------- charts
-def render_chart(v: Visual, path: Path, accent: str) -> Path:
+def render_chart(v: Visual, path: Path, t: Theme) -> Path:
     cats, series = v.categories or [], v.series or []
     if not cats or not series or any(len(s.values) != len(cats) for s in series):
         raise ValueError("chart needs categories and one value per category in every series")
-
-    colors = _palette(accent)
     kind = v.chart_type or ("hbar" if max(len(c) for c in cats) > 14 else "bar")
     if kind == "grouped_bar" and len(series) == 1:
         kind = "bar"
-    height = 5.8 if kind != "hbar" else max(4.6, 0.6 * len(cats) * max(1, len(series) * 0.7) + 2.4)
-    fig, ax = plt.subplots(figsize=(10, height), dpi=150)
-    subtitle = v.y_label if kind != "line" else (v.y_label or None)
-    top = _header(fig, v.chart_title or v.caption, subtitle, accent)
+    hi = cats.index(v.highlight) if v.highlight in cats else None
+    multi = len(series) > 1
 
-    if len(series) > 1:  # inline legend as coloured squares, like a print graphic
-        x = 0.025
+    plot_h = 3.4 if kind != "hbar" else max(2.4, 0.48 * len(cats) * (1 + 0.6 * (len(series) - 1)))
+    fig_h = plot_h + 2.6
+    fig = _new_fig(t, fig_h)
+    y = _tab(fig, t)
+    y = _headline(fig, t, v.chart_title or v.caption, y, v.y_label)
+
+    if multi:  # print-style legend: coloured squares
+        x = 0.035
         for i, s in enumerate(series):
-            fig.add_artist(Rectangle((x, top - 0.032), 0.014, 0.024, transform=fig.transFigure,
-                                     color=colors[i % len(colors)], lw=0))
-            t = fig.text(x + 0.02, top - 0.02, s.name, fontsize=10.5, color=INK, va="center")
-            x += 0.05 + 0.0085 * len(s.name)
-        top -= 0.06
+            fig.add_artist(Rectangle((x, y - 0.2 / fig_h), 0.013, 0.15 / fig_h, transform=fig.transFigure,
+                                     color=t.series[i % len(t.series)], lw=0))
+            lab = fig.text(x + 0.02, y - 0.125 / fig_h, s.name, fontsize=11, color=t.ink, va="center")
+            x = _text_box(fig, lab).x1 + 0.03
+        y -= 0.4 / fig_h
 
+    left = 0.035 if kind != "hbar" else 0.27
+    ax = fig.add_axes((left, 0.75 / fig_h, 0.965 - left - 0.02, y - 0.85 / fig_h))
+    ax.set_facecolor("none")
+
+    def colour(si, ci):
+        if multi:
+            c = t.series[si % len(t.series)]
+            return c if hi is None or ci == hi else _fade(c, t)
+        if hi is None:
+            return t.primary
+        return t.primary if ci == hi else t.pencil
+
+    target = None
     if kind == "line":
         for i, s in enumerate(series):
-            c = colors[i % len(colors)]
-            ax.plot(cats, s.values, lw=2.4, color=c, solid_capstyle="round")
-            ax.plot(cats[-1], s.values[-1], "o", ms=5.5, color=c)
-            ax.annotate(_fmt(s.values[-1], v.unit), (len(cats) - 1, s.values[-1]), xytext=(7, 0),
-                        textcoords="offset points", va="center", fontsize=10.5, fontweight="bold", color=c)
-        ax.grid(axis="y", color=RULE, lw=0.8)
+            c = t.series[i % len(t.series)] if multi else t.primary
+            ax.plot(range(len(cats)), s.values, lw=2.6, color=c, solid_capstyle="round", zorder=3)
+            ax.plot(len(cats) - 1, s.values[-1], "o", ms=6, color=c, zorder=4)
+            ax.annotate(_fmt(s.values[-1], v.unit), (len(cats) - 1, s.values[-1]), xytext=(8, 0),
+                        textcoords="offset points", va="center", fontsize=11.5, fontweight="bold", color=c)
+        ax.set_xticks(range(len(cats)), cats)
+        ax.grid(axis="y", color=t.rule, lw=0.8)
         ax.set_axisbelow(True)
         for side in ("top", "right", "left"):
             ax.spines[side].set_visible(False)
-        ax.spines["bottom"].set_color(INK)
-        ax.tick_params(axis="y", length=0, labelcolor=MUTED)
-        ax.tick_params(axis="x", length=4, color=INK)
-        ax.yaxis.set_major_formatter(lambda y, _: _fmt(y, v.unit))
+        ax.spines["bottom"].set_color(t.ink)
+        ax.tick_params(axis="y", length=0, labelcolor=t.graphite, labelsize=10.5)
+        ax.tick_params(axis="x", length=4, color=t.ink, labelsize=11, labelcolor=t.ink)
+        ax.yaxis.set_major_formatter(lambda val, _: _fmt(val, v.unit))
+        ti = hi if hi is not None else len(cats) - 1
+        target = (ti, max(s.values[ti] for s in series))
+        ax.margins(x=0.06, y=0.2)
     else:
         horizontal = kind == "hbar"
         n = len(series)
         w = 0.78 / n
+        value_labels = []
         for i, s in enumerate(series):
             offs = [p + (i - (n - 1) / 2) * w for p in range(len(cats))]
-            draw = ax.barh if horizontal else ax.bar
-            bars = draw(offs, s.values, w * 0.88, color=colors[i % len(colors)], lw=0)
-            ax.bar_label(bars, labels=[_fmt(x, v.unit) for x in s.values], padding=4, fontsize=10.5, color=INK)
+            cols = [colour(i, c) for c in range(len(cats))]
+            bars = (ax.barh if horizontal else ax.bar)(offs, s.values, w * 0.86, color=cols, lw=0, zorder=3)
+            value_labels.append(ax.bar_label(bars, labels=[_fmt(x, v.unit) for x in s.values], padding=6,
+                                             fontsize=12, color=t.ink, fontweight="bold", zorder=4))
+            if hi is not None and i == 0:
+                target = ((s.values[hi] * 0.8, offs[hi] + w * 0.43) if horizontal
+                          else (offs[hi] + (-1 if hi > (len(cats) - 1) / 2 else 1) * w * 0.43, s.values[hi] * 0.85))
         if horizontal:
-            ax.set_yticks(range(len(cats)), [textwrap.fill(c, 26) for c in cats])
+            ax.set_yticks(range(len(cats)), [textwrap.fill(c, 28) for c in cats])
             ax.invert_yaxis()
             ax.xaxis.set_visible(False)
             for side in ("top", "right", "bottom"):
                 ax.spines[side].set_visible(False)
-            ax.spines["left"].set_color(INK)
+            ax.spines["left"].set_color(t.ink)
+            ax.margins(x=0.45 if v.annotation else 0.1, y=0.03)
         else:
             ax.set_xticks(range(len(cats)), [textwrap.fill(c, 14) for c in cats])
             ax.yaxis.set_visible(False)
             for side in ("top", "right", "left"):
                 ax.spines[side].set_visible(False)
-            ax.spines["bottom"].set_color(INK)
-        ax.tick_params(length=0, labelsize=11)
-        ax.margins(x=0.08 if horizontal else 0.02, y=0.12 if not horizontal else 0.02)
+            ax.spines["bottom"].set_color(t.ink)
+            ax.margins(x=0.03, y=0.55 if v.annotation else 0.12)
+        ax.tick_params(length=0, labelsize=11.5, labelcolor=t.ink)
+        if hi is not None:
+            fig.canvas.draw()
+            for lab in (ax.get_yticklabels() if horizontal else ax.get_xticklabels()):
+                if lab.get_text().replace("\n", " ") == cats[hi]:
+                    lab.set_fontweight("bold")
+            _highlight_text(fig, t, value_labels[0][hi], seed=3, ax=ax)
 
-    _footer(fig, v)
-    fig.tight_layout(rect=(0.0, 0.07, 1, top + 0.01))
-    fig.savefig(path)
-    plt.close(fig)
-    return path
+    if v.annotation and target is not None:
+        fig.canvas.draw()
+        tx, _ = ax.transAxes.inverted().transform(ax.transData.transform(target))
+        side = -1 if tx > 0.55 else 1  # write the note on the roomier side
+        if kind == "hbar":
+            _pen_note(ax, t, v.annotation, target, dx=0.12, dy=-0.34 if (hi or 0) < len(cats) / 2 else 0.34,
+                      rad=-0.35)
+        elif kind == "line":
+            _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.2, rad=0.3 * side)
+        else:
+            _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.16, rad=0.3 * side)
+
+    _source_line(fig, t, v.source_name, v.source_url)
+    return _save(fig, path)
+
+
+# ---------------------------------------------------------------- big-number stat card
+def render_stat(v: Visual, path: Path, t: Theme) -> Path:
+    stats = (v.stats or [])[:3]
+    if not stats:
+        raise ValueError("stat card needs at least one stat")
+    longest = max(len(s.label) for s in stats) / {1: 60, 2: 34, 3: 24}[len(stats)]
+    fig_h = (3.5 if v.chart_title else 2.9) + 0.25 * min(int(longest), 3)
+    fig = _new_fig(t, fig_h)
+    y = _tab(fig, t)
+    if v.chart_title:
+        y = _headline(fig, t, v.chart_title, y, size=16, width=70)
+    n = len(stats)
+    col_w = 0.93 / n
+    for i, s in enumerate(stats):
+        x = 0.035 + i * col_w
+        if i:
+            fig.add_artist(Rectangle((x - 0.015, 0.7 / fig_h), 0.0012, y - 0.8 / fig_h, transform=fig.transFigure,
+                                     color=t.rule, lw=0))
+        size = 66 if n == 1 else 54 if n == 2 else 44
+        num = fig.text(x + 0.004, y - 0.08 / fig_h, s.value, fontfamily=SLAB, fontweight="bold", fontsize=size,
+                       color=t.ink, va="top", zorder=3)
+        if i == 0:
+            _highlight_text(fig, t, num, seed=11)
+        nb = _text_box(fig, num)
+        fig.text(x + 0.004, nb.y0 - 0.2 / fig_h, textwrap.fill(s.label, {1: 60, 2: 34, 3: 24}[n]),
+                 fontsize=13.5 if n < 3 else 12.5, color=t.ink, va="top", linespacing=1.3)
+    _source_line(fig, t, v.source_name, v.source_url)
+    return _save(fig, path)
+
+
+# ---------------------------------------------------------------- pictogram: 100 people
+def _person(ax, x, y, colour, s=1.0):
+    ax.add_patch(Circle((x, y + 0.24 * s), 0.13 * s, fc=colour, ec="none"))
+    ax.add_patch(FancyBboxPatch((x - 0.21 * s, y - 0.34 * s), 0.42 * s, 0.42 * s,
+                                boxstyle=f"round,pad=0,rounding_size={0.18 * s}", fc=colour, ec="none"))
+
+
+def render_waffle(v: Visual, path: Path, t: Theme) -> Path:
+    if v.waffle_value is None or not 0 <= v.waffle_value <= 100:
+        raise ValueError("waffle needs a percentage between 0 and 100")
+    k = int(round(v.waffle_value))
+    fig_h = 5.6
+    fig = _new_fig(t, fig_h)
+    y = _tab(fig, t)
+    if v.chart_title:
+        y = _headline(fig, t, v.chart_title, y, size=17, width=64)
+
+    num = fig.text(0.035, y - 0.3 / fig_h, f"{v.waffle_value:g}%", fontfamily=SLAB, fontweight="bold",
+                   fontsize=60, color=t.ink, va="top", zorder=3)
+    _highlight_text(fig, t, num, seed=5)
+    nb = _text_box(fig, num)
+    fig.text(0.035, nb.y0 - 0.2 / fig_h, textwrap.fill(v.waffle_label or "", 24), fontsize=15, color=t.ink,
+             va="top", linespacing=1.3)
+    fig.text(0.035, 0.7 / fig_h, f"Each figure is one person in 100.", fontsize=10, color=t.graphite)
+
+    ax = fig.add_axes((0.42, 0.6 / fig_h, 0.56, y - 0.62 / fig_h))
+    pitch = 1.3
+    ax.set_xlim(-0.6, 9.6)
+    ax.set_ylim(-0.6, 9 * pitch + 0.55)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    for idx in range(100):
+        r, c = divmod(idx, 10)
+        _person(ax, c, (9 - r) * pitch, t.section_color if idx < k else t.pencil, s=1.15)
+    _source_line(fig, t, v.source_name, v.source_url)
+    return _save(fig, path)
+
+
+# ---------------------------------------------------------------- pull quote
+def render_quote(v: Visual, path: Path, t: Theme) -> Path:
+    if not v.quote_text:
+        raise ValueError("quote needs text")
+    text = v.quote_text.strip().strip('"“”')
+    lines = textwrap.wrap(text, 44)
+    fig_h = 2.9 + 0.5 * len(lines)
+    fig = _new_fig(t, fig_h)
+    y = _tab(fig, t)
+    fig.text(0.03, y + 0.15 / fig_h, "“", fontfamily=SLAB, fontweight="bold", fontsize=96,
+             color=t.section_color, va="top")
+    q = fig.text(0.115, y - 0.2 / fig_h, "\n".join(lines), fontfamily=SLAB, fontsize=23, color=t.ink, va="top",
+                 linespacing=1.35)
+    qb = _text_box(fig, q)
+    fig.add_artist(Rectangle((0.115, qb.y0 - 0.3 / fig_h), 0.05, 0.025 / fig_h, transform=fig.transFigure,
+                             color=t.ink, lw=0))
+    fig.text(0.115, qb.y0 - 0.42 / fig_h, (v.quote_author or v.source_name or "").upper(), fontfamily=COND,
+             fontweight="bold", fontsize=11.5, color=t.ink, va="top")
+    _source_line(fig, t, v.source_name, v.source_url)
+    return _save(fig, path)
+
+
+# ---------------------------------------------------------------- timeline
+def render_timeline(v: Visual, path: Path, t: Theme) -> Path:
+    items = (v.timeline or [])[:8]
+    if len(items) < 2:
+        raise ValueError("timeline needs at least two items")
+    fig_h = 2.5 + 0.72 * len(items)
+    fig = _new_fig(t, fig_h)
+    y = _tab(fig, t)
+    if v.chart_title:
+        y = _headline(fig, t, v.chart_title, y, size=17, width=64)
+    top, bottom = y - 0.3 / fig_h, 0.95 / fig_h
+    step = (top - bottom) / (len(items) - 1)
+    line_x = 0.2
+    fig.add_artist(Rectangle((line_x - 0.0012, bottom), 0.0024, top - bottom, transform=fig.transFigure,
+                             color=t.ink, lw=0, zorder=1))
+    for i, it in enumerate(items):
+        yy = top - i * step
+        fig.text(line_x - 0.025, yy, it.when.upper(), fontfamily=MONO, fontweight="medium", fontsize=10.5, color=t.section_color,
+                 ha="right", va="center")
+        dot = Circle((line_x * WIDTH_IN, yy * fig_h), 0.07, transform=fig.dpi_scale_trans, fc=t.paper, ec=t.ink,
+                     lw=1.8, zorder=3)
+        fig.add_artist(dot)
+        title = fig.text(line_x + 0.03, yy, it.title, fontsize=14, fontweight="bold", color=t.ink,
+                         va="bottom" if it.detail else "center", zorder=3)
+        if i == 0:
+            _highlight_text(fig, t, title, seed=9)
+        if it.detail:
+            fig.text(line_x + 0.03, yy - 0.06 / fig_h, textwrap.fill(it.detail, 82), fontsize=11, color=t.graphite,
+                     va="top")
+    _source_line(fig, t, v.source_name, v.source_url)
+    return _save(fig, path)
 
 
 # ---------------------------------------------------------------- diagrams
@@ -177,7 +434,6 @@ def _split_back_edges(nodes: list[str], edges: list[tuple[str, str]]):
 
 
 def _layers(nodes: list[str], forward: list[tuple[str, str]]) -> dict[str, int]:
-    """Longest-path layering of the acyclic part, top to bottom."""
     layer = {n: 0 for n in nodes}
     for _ in range(len(nodes)):
         changed = False
@@ -190,7 +446,7 @@ def _layers(nodes: list[str], forward: list[tuple[str, str]]) -> dict[str, int]:
     return layer
 
 
-def render_diagram(v: Visual, path: Path, accent: str) -> Path:
+def render_diagram(v: Visual, path: Path, t: Theme) -> Path:
     nodes = {n.id: n.label for n in (v.nodes or [])}
     edges = [(e.source, e.target, e.label) for e in (v.edges or []) if e.source in nodes and e.target in nodes]
     if len(nodes) < 2:
@@ -201,7 +457,7 @@ def render_diagram(v: Visual, path: Path, accent: str) -> Path:
     rows: dict[int, list[str]] = {}
     for n in nodes:
         rows.setdefault(layer[n], []).append(n)
-    for r in sorted(rows)[1:]:  # order each row by its parents' positions to reduce crossings
+    for r in sorted(rows)[1:]:
         prev = {n: i for i, n in enumerate(rows[r - 1])} if r - 1 in rows else {}
 
         def bary(n, prev=prev):
@@ -211,53 +467,56 @@ def render_diagram(v: Visual, path: Path, accent: str) -> Path:
     widest = max(len(r) for r in rows.values())
     loops = [(a, b, l) for a, b, l in edges if (a, b) in back]
 
-    box_w, box_h, gap_x, gap_y = 2.5, 0.8, 0.7, 0.95
-    margin = (1.1 + 0.45 * len(loops)) if loops else 0.4
-    width = max(widest * (box_w + gap_x) - gap_x, 6) + 2 * margin
-    height = len(rows) * (box_h + gap_y) - gap_y + 0.5
-    title_space = 0.9
-    fig, ax = plt.subplots(figsize=(width * 0.85, (height + title_space) * 0.85), dpi=150)
-    ax.set_position((0, 0, 1, height / (height + title_space)))
+    box_w, box_h, gap_x, gap_y = 2.5, 0.8, 0.8, 1.0
+    margin = (2.0 + 0.5 * len(loops)) if loops else 0.5
+    width = max(widest * (box_w + gap_x) - gap_x + 2 * margin, 9.5)
+    height = len(rows) * (box_h + gap_y) - gap_y + 0.4
+    scale = WIDTH_IN * 0.93 / width
+    fig_h = height * scale + 2.0
+    fig = _new_fig(t, fig_h)
+    y = _tab(fig, t)
+    y = _headline(fig, t, v.chart_title or v.caption, y, size=17, width=64)
+    ax = fig.add_axes((0.035, 0.6 / fig_h, 0.93, y - 0.7 / fig_h))
     ax.set_xlim(0, width)
     ax.set_ylim(0, height)
     ax.axis("off")
-    fig.add_artist(Rectangle((0.03, 1 - 0.32 / (height + title_space)), 0.07, 0.07 / (height + title_space) * 1.2,
-                             transform=fig.transFigure, color=accent, lw=0))
-    if v.chart_title:
-        fig.text(0.03, 1 - 0.45 / (height + title_space), v.chart_title, fontfamily=SLAB, fontweight="bold",
-                 fontsize=15, color=INK, va="top")
 
     pos = {}
     for r, ids in rows.items():
-        y = height - 0.25 - r * (box_h + gap_y) - box_h / 2
+        yy = height - 0.2 - r * (box_h + gap_y) - box_h / 2
         span = len(ids) * box_w + (len(ids) - 1) * gap_x
         x0 = (width - span) / 2
         for i, n in enumerate(ids):
-            pos[n] = (x0 + i * (box_w + gap_x) + box_w / 2, y)
+            pos[n] = (x0 + i * (box_w + gap_x) + box_w / 2, yy)
 
-    arrow = dict(arrowstyle="-|>", color=INK, lw=1.2, mutation_scale=13, shrinkA=1, shrinkB=1)
+    arrow = dict(arrowstyle="-|>,head_length=0.5,head_width=0.25", color=t.ink, lw=1.3, shrinkA=1, shrinkB=1)
 
-    def edge_label(x, y, text):
+    def mono_label(x, yy, text):
         if text:
-            ax.text(x, y, textwrap.fill(text, 16), fontsize=9, color=MUTED, ha="center",
-                    va="center", bbox=dict(boxstyle="square,pad=0.15", fc=PAPER, ec="none"), zorder=4)
+            ax.text(x, yy, text.upper(), fontfamily=MONO, fontweight="medium", fontsize=8, color=t.graphite, ha="center", va="center",
+                    bbox=dict(boxstyle="square,pad=0.2", fc=t.paper, ec="none"), zorder=4)
 
     right_edge = max(x for x, _ in pos.values()) + box_w / 2
     left_edge = min(x for x, _ in pos.values()) - box_w / 2
     centre = (left_edge + right_edge) / 2
     used = {True: 0, False: 0}
     for a, b, label in sorted(loops, key=lambda e: abs(pos[e[0]][1] - pos[e[1]][1])):
-        # feedback loop: out of the side nearest the source, along an outer lane, back in at the target
+        # feedback loops are drawn by hand in red pen, out along an outer lane and back in
         (xa, ya), (xb, yb) = pos[a], pos[b]
         right = xa >= centre if abs(xa - centre) > 1e-6 else used[True] <= used[False]
         k = used[right]
         used[right] += 1
-        lane = right_edge + 0.55 + 0.45 * k if right else left_edge - 0.55 - 0.45 * k
+        lane = right_edge + 0.55 + 0.5 * k if right else left_edge - 0.55 - 0.5 * k
         sa = xa + box_w / 2 if right else xa - box_w / 2
         sb = xb + box_w / 2 if right else xb - box_w / 2
-        ax.plot([sa, lane, lane], [ya, ya, yb], color=MUTED, lw=1.1, ls=(0, (3, 2.5)), zorder=1)
-        ax.annotate("", xy=(sb, yb), xytext=(lane, yb), arrowprops={**arrow, "color": MUTED, "linestyle": (0, (3, 2.5))})
-        edge_label(lane, (ya + yb) / 2, label)
+        (ln,) = ax.plot([sa, lane, lane], [ya, ya, yb], color=t.red_pen, lw=1.7, zorder=1, solid_capstyle="round")
+        ln.set_sketch_params(scale=1.2, length=50, randomness=20)
+        ann = ax.annotate("", xy=(sb, yb), xytext=(lane, yb), arrowprops={**arrow, "color": t.red_pen, "lw": 1.7})
+        ann.arrow_patch.set_sketch_params(scale=1.2, length=50, randomness=20)
+        if label:
+            ax.text(lane + (0.12 if right else -0.12), (ya + yb) / 2, textwrap.fill(label, 12), fontfamily=HAND,
+                    fontweight="bold", fontsize=16, color=t.red_pen, ha="left" if right else "right",
+                    va="center", zorder=4)
 
     for a, b, label in edges:
         if (a, b) in back:
@@ -269,24 +528,58 @@ def render_diagram(v: Visual, path: Path, accent: str) -> Path:
         else:
             start, end = (xa, ya - box_h / 2), (xb, yb + box_h / 2)
         ax.annotate("", xy=end, xytext=start, arrowprops=arrow)
-        edge_label((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, label)
+        mono_label((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, label)
 
     first_row = set(rows.get(0, []))
-    navy = NEWS_PALETTE[0]
-    for n, (x, y) in pos.items():
+    for n, (x, yy) in pos.items():
         entry = n in first_row
-        ax.add_patch(FancyBboxPatch((x - box_w / 2, y - box_h / 2), box_w, box_h,
-                                    boxstyle="square,pad=0", fc=navy if entry else CARD,
-                                    ec=navy if entry else INK, lw=1.1, zorder=3))
-        ax.text(x, y, textwrap.fill(nodes[n], 22), ha="center", va="center", fontsize=10.5,
-                fontweight="medium", color="white" if entry else INK, zorder=5)
+        ax.add_patch(FancyBboxPatch((x - box_w / 2, yy - box_h / 2), box_w, box_h, boxstyle="square,pad=0",
+                                    fc=t.section_color if entry else t.card, ec=t.section_color if entry else t.ink,
+                                    lw=1.2, zorder=3))
+        ax.text(x, yy, textwrap.fill(nodes[n], 20), ha="center", va="center", fontsize=11, fontweight="medium",
+                color="white" if entry else t.ink, zorder=5)
 
-    fig.savefig(path)
+    _source_line(fig, t, "", "")
+    return _save(fig, path)
+
+
+# ---------------------------------------------------------------- photos
+def duotone(src: Path, dst: Path, t: Theme, width_px=1500, aspect: float | None = None, tint: bool = True) -> Path:
+    """Crop a photo to `aspect` (width/height) and re-ink it in the series colour on paper.
+
+    The duotone is what makes stock photos from anywhere look like ours. tint=False only crops."""
+    img = plt.imread(str(src))
+    if img.dtype == np.uint8:
+        img = img / 255.0
+    rgb = img[..., :3] if img.ndim == 3 else np.stack([img] * 3, -1)
+    if aspect:  # centre crop to width/height ratio
+        h, w = rgb.shape[:2]
+        if w / h > aspect:
+            nw = int(h * aspect)
+            rgb = rgb[:, (w - nw) // 2:(w - nw) // 2 + nw]
+        else:
+            nh = int(w / aspect)
+            rgb = rgb[(h - nh) // 2:(h - nh) // 2 + nh, :]
+    if tint:
+        lum = rgb @ np.array([0.299, 0.587, 0.114])
+        lo, hi = np.percentile(lum, (2, 98))
+        lum = np.clip((lum - lo) / max(hi - lo, 1e-6), 0, 1) ** 0.9
+        dark, light = np.array(to_rgb(t.section_color)) * 0.6, np.array(to_rgb(t.paper))
+        rgb = dark[None, None, :] * (1 - lum[..., None]) + light[None, None, :] * lum[..., None]
+    h, w = rgb.shape[:2]
+    fig = plt.figure(figsize=(width_px / DPI, width_px / DPI * h / w), dpi=DPI)
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.imshow(np.clip(rgb, 0, 1), aspect="auto", interpolation="lanczos")
+    ax.axis("off")
+    fig.savefig(dst)
     plt.close(fig)
-    return path
+    return dst
 
 
-# ---------------------------------------------------------------- source images
+COVER_PHOTO_ASPECT = (1 - 0.56) * WIDTH_IN / 5.6  # right-hand panel of the cover
+
+
+# ---------------------------------------------------------------- source images (news items)
 _META = re.compile(r"<meta\s+[^>]*>", re.IGNORECASE)
 
 
@@ -304,19 +597,15 @@ def fetch_source_image(page_url: str, path_stem: Path) -> Path:
     if not page_url.startswith("http"):
         raise ValueError("no source URL")
     gh = re.match(r"https?://github\.com/([^/]+)/([^/#?]+)", page_url)
-    if gh:  # GitHub's social card for a repo
+    if gh:
         image_url = f"https://opengraph.githubassets.com/1/{gh.group(1)}/{gh.group(2)}"
     else:
         resp = requests.get(page_url, headers=UA, timeout=20)
         resp.raise_for_status()
         ctype = resp.headers.get("content-type", "").split(";")[0]
-        if ctype in IMAGE_TYPES:
-            image_url = page_url
-        else:
-            image_url = _og_image(resp.text[:300_000], resp.url)
-            if not image_url:
-                raise ValueError(f"no preview image on {page_url}")
-
+        image_url = page_url if ctype in IMAGE_TYPES else _og_image(resp.text[:300_000], resp.url)
+        if not image_url:
+            raise ValueError(f"no preview image on {page_url}")
     img = requests.get(image_url, headers=UA, timeout=30)
     img.raise_for_status()
     ctype = img.headers.get("content-type", "").split(";")[0]
@@ -328,34 +617,58 @@ def fetch_source_image(page_url: str, path_stem: Path) -> Path:
 
 
 # ---------------------------------------------------------------- cover
-def render_cover(title: str, label: str, newsletter: str, path: Path, accent: str,
+def render_cover(title: str, highlight: str, path: Path, t: Theme, photo: Path | None = None,
                  issue_date: date | None = None) -> Path:
-    """A print-style section front: masthead rules, kicker, slab headline, dateline."""
+    """Section front: masthead, tab, slab headline with one highlighted phrase, duotone photo panel."""
     issue_date = issue_date or date.today()
-    fig = plt.figure(figsize=(11.2, 5.6), dpi=150)
-    ax = fig.add_axes((0, 0, 1, 1))
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
+    fig_h = 5.6
+    fig = _new_fig(t, fig_h)
+    split = 0.56
+
+    pax = fig.add_axes((split, 0, 1 - split, 1))
+    pax.axis("off")
+    if photo is not None:  # already duotoned and cropped to the panel's aspect
+        pax.imshow(plt.imread(str(photo)), aspect="auto")
+    else:  # halftone field in the series colour, like a newsprint photo plate
+        pax.set_xlim(0, 1)
+        pax.set_ylim(0, 1)
+        pax.add_patch(Rectangle((0, 0), 1, 1, color=t.section_color))
+        for i in range(19):
+            for j in range(24):
+                r = 0.003 + 0.017 * (j / 24) ** 1.5
+                pax.add_patch(Circle((0.03 + i * 0.053 + (0.026 if j % 2 else 0), 0.02 + j * 0.042), r,
+                                     color=t.paper, alpha=0.85, lw=0))
 
     # masthead
-    ax.add_patch(Rectangle((0.06, 0.885), 0.88, 0.006, color=INK, lw=0))
-    ax.add_patch(Rectangle((0.06, 0.872), 0.88, 0.0015, color=INK, lw=0))
-    ax.text(0.06, 0.915, newsletter.upper(), fontfamily=SLAB, fontweight="bold", fontsize=13, color=INK,
-            va="bottom")
-    ax.text(0.94, 0.915, f"{issue_date:%A, %B} {issue_date.day}, {issue_date:%Y}", fontsize=11, color=MUTED,
-            va="bottom", ha="right")
+    fig.text(0.04, 0.905, t.newsletter.upper(), fontfamily=SLAB, fontweight="bold", fontsize=13, color=t.ink,
+             va="bottom")
+    fig.add_artist(Rectangle((0.04, 0.88), split - 0.075, 0.006, transform=fig.transFigure, color=t.ink, lw=0))
+    fig.add_artist(Rectangle((0.04, 0.868), split - 0.075, 0.0015, transform=fig.transFigure, color=t.ink, lw=0))
+    fig.text(split - 0.035, 0.905, f"{issue_date:%b} {issue_date.day}, {issue_date:%Y}".upper(), fontfamily=MONO,
+             fontsize=9.5, color=t.graphite, ha="right", va="bottom")
 
-    # kicker + headline
-    ax.add_patch(Rectangle((0.06, 0.765), 0.012, 0.05, color=accent, lw=0))
-    ax.text(0.082, 0.79, label.upper(), fontsize=13, fontweight="bold", color=accent, va="center")
-    lines = textwrap.wrap(title, 30 if len(title) > 60 else 26)
-    size = 38 if len(lines) <= 2 else 32 if len(lines) == 3 else 27
-    ax.text(0.06, 0.72, "\n".join(lines), fontfamily=SLAB, fontweight="bold", fontsize=size, color=INK,
-            va="top", linespacing=1.12)
+    y = _tab(fig, t, x=0.04, y=0.79)
 
-    # footer rule
-    ax.add_patch(Rectangle((0.06, 0.09), 0.88, 0.0015, color=RULE, lw=0))
-    fig.savefig(path)
-    plt.close(fig)
-    return path
+    # headline, line by line so the highlight phrase can be marked
+    lines = textwrap.wrap(title, 22 if len(title) > 50 else 20)
+    size = 34 if len(lines) <= 3 else 29 if len(lines) == 4 else 25
+    line_h = size / 72 * 1.2 / fig_h
+    joined = " ".join(lines).lower()
+    start = joined.find(highlight.lower().strip()) if highlight else -1
+    end = start + len(highlight.strip()) if start >= 0 else -1
+    offset = 0
+    for i, line in enumerate(lines):
+        yy = y - 0.02 - i * line_h
+        txt = fig.text(0.04, yy, line, fontfamily=SLAB, fontweight="bold", fontsize=size, color=t.ink, va="top",
+                       zorder=3)
+        a, b = max(start - offset, 0), min(end - offset, len(line))
+        if start >= 0 and a < b:
+            full = _text_box(fig, txt)
+            meas = lambda s: _text_box(fig, fig.text(0.04, yy, s, fontfamily=SLAB, fontweight="bold",  # noqa: E731
+                                                     fontsize=size, alpha=0, va="top")).x1
+            x0 = meas(line[:a]) if a else full.x0
+            _highlight(fig, t, x0, full.y0, meas(line[:b]), full.y1, seed=20 + i)
+        offset += len(line) + 1
+
+    fig.text(0.04, 0.06, "THE EVIDENCE, MARKED UP.", fontfamily=MONO, fontweight="medium", fontsize=8.5, color=t.graphite)
+    return _save(fig, path)

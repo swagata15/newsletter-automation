@@ -1,4 +1,14 @@
-"""Build one issue end to end: research -> write -> clean up style -> render visuals."""
+"""Build one issue end to end: research -> write -> clean up style -> render visuals -> save.
+
+Issues are saved by category so they are easy to track:
+
+    issues/
+      README.md                     <- index of every issue, newest first, with status
+      this-week-in-ai/2026-11-07-<slug>/
+      ai-and-the-mind/2026-11-04-<slug>/
+      weekend-build/2026-11-06-<slug>/
+        issue.md  issue.json  research-notes.md  cover.png  v1.png ...
+"""
 
 from __future__ import annotations
 
@@ -12,12 +22,13 @@ from urllib.parse import urlparse
 
 import anthropic
 
-from . import claude, prompts, sources, visuals
+from . import claude, photos, prompts, sources, visuals
 from .models import Issue, Visual
 from .style import find_slop, remove_dashes
 
 log = logging.getLogger(__name__)
 
+ISSUES_DIR = Path("issues")
 HISTORY = Path("history.json")
 KINDS = ("weekly", "psychology", "tutorial")
 
@@ -28,10 +39,18 @@ class Built:
     issue: Issue
     markdown: str          # final markdown with local image paths
     out_dir: Path
-    cover: Path | None
 
 
-# ---------------------------------------------------------------- helpers
+# ---------------------------------------------------------------- folders, history, index
+def slugify(text: str, limit: int = 60) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return s[:limit].rstrip("-") or "issue"
+
+
+def category_dir(config: dict, kind: str) -> Path:
+    return ISSUES_DIR / slugify(config["issues"][kind].get("label", kind))
+
+
 def kind_for_today(config: dict) -> str:
     day = datetime.now(timezone.utc).strftime("%A").lower()
     kind = config.get("schedule", {}).get(day)
@@ -44,10 +63,35 @@ def load_history() -> list[dict]:
     return json.loads(HISTORY.read_text()) if HISTORY.exists() else []
 
 
-def record_history(kind: str, issue: Issue, topic: str) -> None:
+def record_history(built: Built, status: str, config: dict) -> None:
     history = load_history()
-    history.append({"date": date.today().isoformat(), "type": kind, "title": issue.title, "topic": topic})
+    entry = {"date": date.today().isoformat(), "type": built.kind, "title": built.issue.title,
+             "topic": built.issue.topic, "folder": str(built.out_dir), "status": status}
+    history = [h for h in history if h.get("folder") != entry["folder"]] + [entry]
     HISTORY.write_text(json.dumps(history, indent=2) + "\n")
+    write_index(config)
+
+
+def write_index(config: dict) -> None:
+    """issues/README.md: one table per category, newest first, linking each issue."""
+    history = load_history()
+    lines = ["# Issues", "", "Generated automatically. Status: `local` = saved here only, "
+             "`draft` = Substack draft created, `published` = sent to subscribers.", ""]
+    for kind in KINDS:
+        label = config["issues"][kind].get("label", kind)
+        rows = sorted((h for h in history if h["type"] == kind and h.get("folder")), key=lambda h: h["date"],
+                      reverse=True)
+        lines += [f"## {label}", ""]
+        if not rows:
+            lines += ["_None yet._", ""]
+            continue
+        lines += ["| Date | Title | Status |", "|---|---|---|"]
+        for h in rows:
+            rel = Path(h["folder"]).relative_to(ISSUES_DIR) if h["folder"].startswith(str(ISSUES_DIR)) else h["folder"]
+            lines.append(f"| {h['date']} | [{h['title']}]({rel}/issue.md) | {h.get('status', 'local')} |")
+        lines.append("")
+    ISSUES_DIR.mkdir(exist_ok=True)
+    (ISSUES_DIR / "README.md").write_text("\n".join(lines))
 
 
 def choose_topic(client, kind: str, cfg: dict, date_str: str) -> str:
@@ -60,39 +104,90 @@ def choose_topic(client, kind: str, cfg: dict, date_str: str) -> str:
     return claude.quick_answer(client, prompts.pick_topic(kind, used, date_str), web=True).splitlines()[0].strip()
 
 
-def _norm(url: str) -> str:
-    return url.split("#")[0].split("?")[0].rstrip("/").lower().removeprefix("https://").removeprefix("http://")
+# ---------------------------------------------------------------- grounding checks
+def _norm_text(s: str) -> str:
+    s = s.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+    return re.sub(r"[^a-z0-9%.' ]+", " ", re.sub(r"\s+", " ", s)).strip()
 
 
 def _number_variants(v: float) -> list[str]:
-    out = {f"{v:g}", f"{v:,.0f}" if float(v).is_integer() else f"{v:,.1f}"}
+    out = {f"{v:g}"}
     if float(v).is_integer():
-        out.add(str(int(v)))
+        out |= {str(int(v)), f"{int(v):,}"}
     else:
-        out.update({f"{v:.1f}", f"{v:.2f}".rstrip("0")})
+        out |= {f"{v:.1f}", f"{v:.2f}".rstrip("0"), f"{v:,.1f}"}
     return [o for o in out if o]
 
 
-def chart_is_grounded(v: Visual, notes: str) -> bool:
-    """Reject charts whose source or numbers don't appear in the research notes."""
-    notes_l = notes.lower()
-    if not v.source_url or urlparse(v.source_url).netloc.removeprefix("www.").lower() not in notes_l:
-        log.warning("Dropping chart %s: source %r not in research notes", v.id, v.source_url)
-        return False
-    if _norm(v.source_url) not in notes_l.replace("https://", "").replace("http://", ""):
-        log.info("Chart %s: exact source URL not in notes, but domain is", v.id)
-    values = [x for s in (v.series or []) for x in s.values]
-    found = sum(any(re.search(rf"(?<![\d.]){re.escape(n)}(?![\d])", notes) for n in _number_variants(x)) for x in values)
-    if not values or found / len(values) < 0.75:
-        log.warning("Dropping chart %s: only %d/%d values found in research notes", v.id, found, len(values))
-        return False
-    return True
+def _numbers_found(values: list[float], notes: str) -> tuple[int, int]:
+    found = sum(any(re.search(rf"(?<![\d.]){re.escape(n)}(?![\d])", notes) for n in _number_variants(x))
+                for x in values)
+    return found, len(values)
 
 
+def _source_ok(v: Visual, notes: str) -> bool:
+    dom = urlparse(v.source_url).netloc.removeprefix("www.").lower() if v.source_url else ""
+    return bool(dom) and dom in notes.lower()
+
+
+def grounded(v: Visual, notes: str) -> tuple[bool, str]:
+    """Every number or quote in a data visual must be traceable to the research notes."""
+    if v.kind in ("chart", "stat", "waffle", "quote") and not _source_ok(v, notes):
+        return False, f"source {v.source_url!r} not in research notes"
+    if v.kind == "chart":
+        found, total = _numbers_found([x for s in (v.series or []) for x in s.values], notes)
+        return (total > 0 and found / total >= 0.75), f"{found}/{total} values found in notes"
+    if v.kind == "stat":
+        nums = [float(n.replace(",", "")) for s in (v.stats or []) for n in re.findall(r"\d[\d,]*\.?\d*", s.value)]
+        nums = [n for n in nums if not (n < 10 and float(n).is_integer())]  # "1 in 3" style counts are fine
+        found, total = _numbers_found(nums, notes)
+        return found == total, f"{found}/{total} stat values found in notes"
+    if v.kind == "waffle":
+        found, _ = _numbers_found([v.waffle_value or -1], notes)
+        return bool(found), "waffle value found" if found else "waffle value not in notes"
+    if v.kind == "quote":
+        ok = _norm_text(v.quote_text or "")[:120] in _norm_text(notes)
+        return ok, "quote is verbatim in notes" if ok else "quote not found verbatim in notes"
+    return True, ""
+
+
+# ---------------------------------------------------------------- rendering
 def _image_md(path: Path, alt: str, caption: str) -> str:
     caption = caption.replace('"', "'")
-    alt = alt.replace("]", ")").replace("[", "(")
+    alt = alt.replace("]", ")").replace("[", "(").replace('"', "'")
     return f'![{alt}]({path.resolve()} "{caption}")'
+
+
+def render_visual(v: Visual, out_dir: Path, notes: str, theme: visuals.Theme) -> str:
+    stem = out_dir / v.id
+    png = stem.with_suffix(".png")
+    caption = v.caption
+    if v.kind in ("chart", "stat", "waffle", "quote"):
+        ok, why = grounded(v, notes)
+        if not ok:
+            raise ValueError(f"not grounded in research: {why}")
+    if v.kind == "chart":
+        path = visuals.render_chart(v, png, theme)
+    elif v.kind == "stat":
+        path = visuals.render_stat(v, png, theme)
+    elif v.kind == "waffle":
+        path = visuals.render_waffle(v, png, theme)
+    elif v.kind == "quote":
+        path = visuals.render_quote(v, png, theme)
+    elif v.kind == "timeline":
+        path = visuals.render_timeline(v, png, theme)
+    elif v.kind == "diagram":
+        path = visuals.render_diagram(v, png, theme)
+    elif v.kind == "photo":
+        found = photos.find_photo(v.photo_query or v.caption, out_dir / f"{v.id}-raw")
+        if not found:
+            raise ValueError("no photo (set PEXELS_API_KEY to enable photos)")
+        path = visuals.duotone(found.path, png, theme, aspect=16 / 9, tint=theme.duotone_photos)
+        caption = f"{v.caption} ({found.credit})"
+    else:  # "image": the source's own preview image, credited
+        path = visuals.fetch_source_image(v.source_url, stem)
+        caption = f"{v.caption} (Image: {v.source_name})" if v.source_name else v.caption
+    return _image_md(path, v.chart_title or v.caption, caption)
 
 
 # ---------------------------------------------------------------- main build
@@ -101,9 +196,8 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
         raise ValueError(f"Unknown issue type {kind!r}; choose from {KINDS}")
     client = client or anthropic.Anthropic()
     nl, cfg = config["newsletter"], config["issues"][kind]
+    theme = visuals.Theme.from_config(config, kind)
     date_str = date.today().strftime("%A, %B %d, %Y")
-    out_dir = Path("output") / f"{date.today():%Y-%m-%d}-{kind}"
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Research
     if kind == "weekly":
@@ -115,12 +209,8 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
         research_prompt = (prompts.psychology_research(topic, date_str) if kind == "psychology"
                            else prompts.tutorial_research(topic, cfg, date_str))
     log.info("Issue type %s, topic: %s", kind, topic)
-    notes = claude.research(
-        client, research_prompt,
-        effort=cfg.get("research_effort", cfg["effort"]),
-        max_searches=cfg["max_searches"], max_fetches=cfg["max_fetches"],
-    )
-    (out_dir / "research-notes.md").write_text(notes)
+    notes = claude.research(client, research_prompt, effort=cfg.get("research_effort", cfg["effort"]),
+                            max_searches=cfg["max_searches"], max_fetches=cfg["max_fetches"])
 
     # 2. Write
     write_prompt = {
@@ -129,6 +219,11 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
         "tutorial": lambda: prompts.tutorial_write(topic, notes, cfg, nl, date_str),
     }[kind]()
     issue = claude.write_issue(client, write_prompt, effort=cfg["effort"])
+    issue.topic = topic
+
+    out_dir = category_dir(config, kind) / f"{date.today():%Y-%m-%d}-{slugify(issue.title)}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "research-notes.md").write_text(notes)
 
     # 3. Style: strip dashes, rewrite stock AI phrases, strip dashes again
     issue.markdown = remove_dashes(issue.markdown)
@@ -141,43 +236,42 @@ def build(kind: str, config: dict, topic: str | None = None, client: anthropic.A
             log.warning("Still contains: %s (review before publishing)", leftover)
     issue.title, issue.subtitle = remove_dashes(issue.title), remove_dashes(issue.subtitle)
     for v in issue.visuals:
-        v.caption = remove_dashes(v.caption)
+        for attr in ("caption", "chart_title", "y_label", "annotation", "waffle_label"):
+            if getattr(v, attr):
+                setattr(v, attr, remove_dashes(getattr(v, attr)))
+        for s in v.stats or []:
+            s.label = remove_dashes(s.label)
+        for it in v.timeline or []:
+            it.title, it.detail = remove_dashes(it.title), remove_dashes(it.detail)
 
     # 4. Visuals
-    brand = nl.get("accent_color", "#A63A2B")
     markdown = issue.markdown
     for v in issue.visuals:
-        stem = out_dir / v.id
         try:
-            if v.kind == "chart":
-                if not chart_is_grounded(v, notes):
-                    raise ValueError("chart data not grounded in research")
-                path = visuals.render_chart(v, stem.with_suffix(".png"), brand)
-                caption = v.caption
-            elif v.kind == "diagram":
-                path = visuals.render_diagram(v, stem.with_suffix(".png"), brand)
-                caption = v.caption
-            else:
-                path = visuals.fetch_source_image(v.source_url, stem)
-                caption = f"{v.caption} (Image: {v.source_name})" if v.source_name else v.caption
-            replacement = _image_md(path, v.chart_title or v.caption, caption)
-            log.info("Visual %s (%s) -> %s", v.id, v.kind, path.name)
+            replacement = render_visual(v, out_dir, notes, theme)
+            log.info("Visual %s (%s) rendered", v.id, v.kind)
         except Exception as exc:
             log.warning("Skipping visual %s (%s): %s", v.id, v.kind, exc)
             replacement = ""
         markdown = markdown.replace(f"[[VISUAL:{v.id}]]", replacement)
-    markdown = re.sub(r"^\s*\[\[VISUAL:[^\]]*\]\]\s*$", "", markdown, flags=re.M)  # unknown ids
+    markdown = re.sub(r"^\s*\[\[VISUAL:[^\]]*\]\]\s*$", "", markdown, flags=re.M)
     markdown = re.sub(r"\n{3,}", "\n\n", markdown).strip()
 
-    cover = None
+    # 5. Cover (Substack uses the first image as the social preview)
     try:
-        cover = visuals.render_cover(issue.title, cfg["label"], nl["name"], out_dir / "cover.png", brand)
-        markdown = f"![{issue.title}]({cover.resolve()})\n\n{markdown}"
+        cover_photo = None
+        found = photos.find_photo(issue.cover_photo_query, out_dir / "cover-raw")
+        if found:
+            cover_photo = visuals.duotone(found.path, out_dir / "cover-photo.png", theme, width_px=900,
+                                          aspect=visuals.COVER_PHOTO_ASPECT, tint=theme.duotone_photos)
+        cover = visuals.render_cover(issue.title, issue.cover_highlight, out_dir / "cover.png", theme, cover_photo)
+        credit = f' "{found.credit}"' if found else ""
+        markdown = f"![{issue.title}]({cover.resolve()}{credit})\n\n{markdown}"
     except Exception as exc:
         log.warning("Cover image failed: %s", exc)
 
-    (out_dir / "issue.md").write_text(f"# {issue.title}\n\n*{issue.subtitle}*\n\n{markdown}\n")
+    readable = markdown.replace(f"{out_dir.resolve()}/", "")  # relative image paths, so it previews on GitHub
+    (out_dir / "issue.md").write_text(f"# {issue.title}\n\n*{issue.subtitle}*\n\n{readable}\n")
     (out_dir / "issue.json").write_text(issue.model_dump_json(indent=2))
     log.info("Saved %s", out_dir / "issue.md")
-    issue.topic = topic
-    return Built(kind, issue, markdown, out_dir, cover)
+    return Built(kind, issue, markdown, out_dir)
