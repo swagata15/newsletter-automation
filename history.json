@@ -46,5 +46,13 @@
     "topic": "Build a research assistant that searches the web and cites its sources",
     "folder": "issues/weekend-build/2026-11-19-build-a-research-assistant-that-shows-its-sources",
     "status": "local"
+  },
+  {
+    "date": "2026-12-01",
+    "type": "psychology",
+    "title": "We say we don't trust AI. Then we stop checking its work",
+    "topic": "Do people trust AI more than humans? The psychology of algorithm appreciation and aversion",
+    "folder": "issues/ai-and-the-mind/2026-12-01-we-say-we-don-t-trust-ai-then-we-stop-checking-its-work",
+    "status": "local"
   }
 ]

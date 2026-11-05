@@ -348,7 +348,7 @@ def render_waffle(v: Visual, path: Path, t: Theme) -> Path:
     nb = _text_box(fig, num)
     fig.text(0.035, nb.y0 - 0.2 / fig_h, textwrap.fill(v.waffle_label or "", 24), fontsize=15, color=t.ink,
              va="top", linespacing=1.3)
-    fig.text(0.035, 0.7 / fig_h, f"Each figure is one person in 100.", fontsize=10, color=t.graphite)
+    fig.text(0.035, 0.7 / fig_h, "Each figure is 1 in 100.", fontsize=10, color=t.graphite)
 
     ax = fig.add_axes((0.42, 0.6 / fig_h, 0.56, y - 0.62 / fig_h))
     pitch = 1.3
