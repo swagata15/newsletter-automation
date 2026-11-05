@@ -1,0 +1,25 @@
+# Newsletter settings - edit these to match your voice and audience.
+newsletter:
+  name: "My AI Newsletter"
+  audience: "builders, founders and curious professionals who want to keep up with AI without the hype"
+  tone: "clear, practical, a little witty; explain why each story matters"
+  sections:
+    - "Top Story"
+    - "Quick Hits"
+    - "Tools & Releases"
+    - "Research Worth Reading"
+    - "One Thing to Try This Week"
+  max_stories: 8
+  # How far back to look for news (days)
+  lookback_days: 7
+  tags: ["AI", "Newsletter"]
+
+# RSS/Atom feeds to pull stories from. Add or remove freely.
+feeds:
+  - https://openai.com/news/rss.xml
+  - https://blog.google/technology/ai/rss/
+  - https://huggingface.co/blog/feed.xml
+  - https://techcrunch.com/category/artificial-intelligence/feed/
+  - https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+  - https://venturebeat.com/category/ai/feed/
+  - https://rss.arxiv.org/rss/cs.AI

@@ -1,0 +1,5 @@
+anthropic>=2.5.0
+python-substack>=0.10.0
+feedparser>=6.0
+python-dotenv>=1.0
+pyyaml>=6.0
