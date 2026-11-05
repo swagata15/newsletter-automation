@@ -1,0 +1,98 @@
+"""All Claude API calls: web research, structured writing, and style revision."""
+
+from __future__ import annotations
+
+import logging
+
+import anthropic
+
+from .models import Issue
+from .prompts import RESEARCH_SYSTEM, REVISE_PROMPT, WRITER_SYSTEM
+
+log = logging.getLogger(__name__)
+
+MODEL = "claude-opus-5-5"
+# If a safety classifier declines a request, retry it server-side on Anthropic's recommended fallback model.
+FALLBACK = {"fallbacks": "default", "betas": ["server-side-fallback-2026-07-01"]}
+MAX_CONTINUATIONS = 6
+
+
+def _check(msg) -> None:
+    if msg.stop_reason == "refusal":
+        raise RuntimeError(f"Claude declined the request: {msg.stop_details}")
+    if msg.stop_reason == "max_tokens":
+        raise RuntimeError("Response hit max_tokens and was cut off.")
+
+
+def _text(msg) -> str:
+    return "".join(b.text for b in msg.content if b.type == "text")
+
+
+def research(client: anthropic.Anthropic, prompt: str, *, effort: str, max_searches: int, max_fetches: int) -> str:
+    """Let Claude search and read the web, and return its research notes as text."""
+    tools = [
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches},
+        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": max_fetches},
+    ]
+    messages = [{"role": "user", "content": prompt}]
+    notes = []
+    for _ in range(MAX_CONTINUATIONS):
+        with client.beta.messages.stream(
+            model=MODEL,
+            max_tokens=64000,
+            system=RESEARCH_SYSTEM,
+            messages=messages,
+            tools=tools,
+            thinking={"type": "adaptive"},
+            output_config={"effort": effort},
+            **FALLBACK,
+        ) as stream:
+            msg = stream.get_final_message()
+        notes.append(_text(msg))
+        if msg.stop_reason != "pause_turn":  # long server-tool turns pause; send them back to continue
+            break
+        messages.append({"role": "assistant", "content": msg.content})
+    _check(msg)
+    result = "\n".join(n for n in notes if n.strip())
+    log.info("Research done: %d chars of notes (%d output tokens in last turn)", len(result), msg.usage.output_tokens)
+    return result
+
+
+def quick_answer(client: anthropic.Anthropic, prompt: str, *, web: bool = False) -> str:
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 5}] if web else []
+    messages = [{"role": "user", "content": prompt}]
+    for _ in range(MAX_CONTINUATIONS):
+        with client.beta.messages.stream(
+            model=MODEL, max_tokens=16000, messages=messages, tools=tools,
+            thinking={"type": "adaptive"}, output_config={"effort": "medium"}, **FALLBACK,
+        ) as stream:
+            msg = stream.get_final_message()
+        if msg.stop_reason != "pause_turn":
+            break
+        messages.append({"role": "assistant", "content": msg.content})
+    _check(msg)
+    return _text(msg).strip()
+
+
+def write_issue(client: anthropic.Anthropic, prompt: str, *, effort: str) -> Issue:
+    with client.beta.messages.stream(
+        model=MODEL,
+        max_tokens=64000,
+        system=WRITER_SYSTEM,
+        messages=[{"role": "user", "content": prompt}],
+        thinking={"type": "adaptive"},
+        output_config={"effort": effort},
+        output_format=Issue,
+        **FALLBACK,
+    ) as stream:
+        msg = stream.get_final_message()
+    _check(msg)
+    issue = msg.parsed_output
+    if issue is None:
+        raise RuntimeError("Claude did not return a parsable issue.")
+    log.info("Wrote %r: %d words, %d visuals", issue.title, len(issue.markdown.split()), len(issue.visuals))
+    return issue
+
+
+def revise_style(client: anthropic.Anthropic, markdown: str, phrases: list[str]) -> str:
+    return quick_answer(client, REVISE_PROMPT.format(phrases=", ".join(f'"{p}"' for p in phrases), markdown=markdown))

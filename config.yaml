@@ -1,20 +1,62 @@
-# Newsletter settings - edit these to match your voice and audience.
+# ---------------------------------------------------------------------------
+# Newsletter settings. Everything editorial lives here.
+# ---------------------------------------------------------------------------
 newsletter:
   name: "My AI Newsletter"
-  audience: "builders, founders and curious professionals who want to keep up with AI without the hype"
-  tone: "clear, practical, a little witty; explain why each story matters"
-  sections:
-    - "Top Story"
-    - "Quick Hits"
-    - "Tools & Releases"
-    - "Research Worth Reading"
-    - "One Thing to Try This Week"
-  max_stories: 8
-  # How far back to look for news (days)
-  lookback_days: 7
-  tags: ["AI", "Newsletter"]
+  audience: "builders, founders and curious professionals who want to understand AI without the hype"
+  voice: "a sharp, warm human writer: plain words, concrete specifics, honest opinions, occasional dry humour"
+  accent_color: "#A63A2B"  # brick red; used for kickers, rules and the 2nd chart series
 
-# RSS/Atom feeds to pull stories from. Add or remove freely.
+# Which issue goes out on which day (UTC). Used when --type auto (the default).
+schedule:
+  tuesday: psychology
+  thursday: tutorial
+  friday: weekly
+
+issues:
+  weekly:
+    label: "This Week in AI"
+    num_items: 6              # pick the top 5-6 things
+    lookback_days: 7
+    effort: high
+    max_searches: 15
+    max_fetches: 10
+    tags: ["AI", "Weekly Roundup"]
+
+  psychology:
+    label: "AI and the Mind"
+    target_words: 3000
+    effort: high
+    research_effort: xhigh    # this is the heavily researched, data-driven one
+    max_searches: 30
+    max_fetches: 25
+    tags: ["AI", "Psychology", "Research"]
+    # Topics are used in order; once used they are recorded in history.json.
+    # When the list runs out, Claude picks a timely topic itself.
+    topic_backlog:
+      - "Is AI making us lonely? What the research on AI companions and chatbots actually shows"
+      - "Does using AI make us worse at thinking? Cognitive offloading and critical thinking"
+      - "AI and anxiety: how automation fears are affecting workers' mental health"
+      - "Do people trust AI more than humans? The psychology of algorithm appreciation and aversion"
+      - "AI therapy chatbots: does the evidence support them?"
+
+  tutorial:
+    label: "Weekend Build"
+    target_words: 2500
+    effort: high
+    max_searches: 15
+    max_fetches: 15
+    language: "Python"
+    tags: ["AI", "Tutorial", "Build"]
+    topic_backlog:
+      - "Build a multi-agent orchestration system in a weekend"
+      - "Build a research assistant that searches the web and cites its sources"
+      - "Build a RAG chatbot over your own documents"
+      - "Build an AI agent that triages your inbox"
+      - "Build an evaluation harness to test your LLM app"
+
+# RSS/Atom feeds for the weekly roundup (GitHub, Hugging Face papers and
+# Hacker News are pulled automatically on top of these).
 feeds:
   - https://openai.com/news/rss.xml
   - https://blog.google/technology/ai/rss/
@@ -22,4 +64,4 @@ feeds:
   - https://techcrunch.com/category/artificial-intelligence/feed/
   - https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
   - https://venturebeat.com/category/ai/feed/
-  - https://rss.arxiv.org/rss/cs.AI
+  - https://www.technologyreview.com/topic/artificial-intelligence/feed
