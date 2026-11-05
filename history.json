@@ -70,5 +70,13 @@
     "topic": "Build a RAG chatbot over your own documents",
     "folder": "issues/weekend-build/2026-11-26-build-a-chatbot-that-answers-from-your-own-documents",
     "status": "local"
+  },
+  {
+    "date": "2026-12-03",
+    "type": "tutorial",
+    "title": "Build an AI agent that sorts your inbox before breakfast",
+    "topic": "Build an AI agent that triages your inbox",
+    "folder": "issues/weekend-build/2026-12-03-build-an-ai-agent-that-sorts-your-inbox-before-breakfast",
+    "status": "local"
   }
 ]

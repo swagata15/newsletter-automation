@@ -115,7 +115,7 @@ def _number_variants(v: float) -> list[str]:
     if float(v).is_integer():
         out |= {str(int(v)), f"{int(v):,}"}
     else:
-        out |= {f"{v:.1f}", f"{v:.2f}".rstrip("0"), f"{v:,.1f}"}
+        out |= {f"{v:.1f}", f"{v:.2f}", f"{v:.2f}".rstrip("0"), f"{v:,.1f}"}
     return [o for o in out if o]
 
 
