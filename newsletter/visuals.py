@@ -664,6 +664,8 @@ def render_cover(title: str, highlight: str, path: Path, t: Theme, photo: Path |
     # headline, line by line so the highlight phrase can be marked
     lines = textwrap.wrap(title, 22 if len(title) > 50 else 20)
     size = 34 if len(lines) <= 3 else 29 if len(lines) == 4 else 25
+    available_pt = (split - 0.08) * WIDTH_IN * 72  # width of the text column in points
+    size = min(size, available_pt / (0.58 * max(len(l) for l in lines)))  # long lines shrink to fit
     line_h = size / 72 * 1.2 / fig_h
     joined = " ".join(lines).lower()
     start = joined.find(highlight.lower().strip()) if highlight else -1

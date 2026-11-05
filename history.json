@@ -62,5 +62,13 @@
     "topic": "AI therapy chatbots: does the evidence support them?",
     "folder": "issues/ai-and-the-mind/2026-12-08-can-a-chatbot-be-your-therapist-what-the-trials-say",
     "status": "local"
+  },
+  {
+    "date": "2026-11-26",
+    "type": "tutorial",
+    "title": "Build a chatbot that answers from your own documents",
+    "topic": "Build a RAG chatbot over your own documents",
+    "folder": "issues/weekend-build/2026-11-26-build-a-chatbot-that-answers-from-your-own-documents",
+    "status": "local"
   }
 ]

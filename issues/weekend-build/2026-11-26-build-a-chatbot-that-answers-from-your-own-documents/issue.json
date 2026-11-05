@@ -1,0 +1,191 @@
+{
+  "title": "Build a chatbot that answers from your own documents",
+  "subtitle": "AskDocs finds the right passages, cites the exact file, and admits when it doesn't know. About 100 lines of Python.",
+  "topic": "Build a RAG chatbot over your own documents",
+  "cover_highlight": "your own documents",
+  "cover_photo_query": "stack of documents folders office",
+  "markdown": "Every team has a pile of documents nobody can find anything in: policies, meeting notes, specs, the onboarding wiki. This weekend you'll build **AskDocs**, a chatbot that answers questions from *your* files, cites the exact file for every answer, and says \"I don't know\" when the answer isn't there.\n\nThis pattern is called RAG, retrieval-augmented generation. It sounds fancy. It's three steps: find the relevant passages, hand them to the model, and ask it to answer only from them. We'll build it in about 100 lines of Python, with no vector database and no embeddings bill.\n\n[[VISUAL:v1]]\n\n## What you'll build\n\nYou point AskDocs at a folder of Markdown or text files and start asking questions:\n\n1. **Indexing.** Every file is split into paragraph-sized chunks that remember which file they came from.\n2. **Search.** For each question, a classic keyword ranking method called BM25 finds the five most relevant chunks.\n3. **Answering.** Those chunks go to Claude as *search results*. Claude answers using only them, and attaches a citation to each claim.\n4. **Footnotes.** Your code turns the citations into [1], [2] markers with the file paths, so anyone can check the answer.\n\n[[VISUAL:v2]]\n\n## Before you start\n\nYou need Python 3.10+, a Claude API key from the [Claude Console](https://platform.claude.com), and a folder of `.md` or `.txt` files to test with. (An exported wiki or a few policy docs is perfect.)\n\n```bash\nmkdir askdocs && cd askdocs\npython -m venv .venv && source .venv/bin/activate\npip install anthropic rank-bm25\nexport ANTHROPIC_API_KEY=\"your-key-here\"\n```\n\n**Cost.** Search runs on your laptop and costs nothing. Each answer is one call to Claude Sonnet 5.5 ($2 per million input tokens, $10 per million output), with five short passages attached, so a question costs a fraction of a cent ([pricing](https://platform.claude.com/docs/en/about-claude/pricing)).\n\n[[VISUAL:v3]]\n\n## Saturday: split, search and retrieve\n\n### Step 1: Split your documents into chunks\n\nCreate `askdocs.py` and start with loading and splitting:\n\n```python\n\"\"\"AskDocs: chat with your own documents, with a source for every answer.\"\"\"\nimport re\nimport sys\nfrom pathlib import Path\n\nimport anthropic\nfrom rank_bm25 import BM25Plus\n\nMODEL = \"claude-sonnet-5-5\"\nclient = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY\n\nSYSTEM = \"\"\"You answer questions using only the documents provided in the conversation.\nIf the documents don't contain the answer, say so plainly and suggest what to look for instead.\nNever fill gaps from general knowledge. Keep answers short and specific.\"\"\"\n\n\ndef load_chunks(folder: str, max_chars: int = 900) -> list[dict]:\n    \"\"\"Split every .md and .txt file into paragraph-sized chunks that remember where they came from.\"\"\"\n    chunks = []\n    for path in sorted(Path(folder).rglob(\"*\")):\n        if path.suffix.lower() not in {\".md\", \".txt\"}:\n            continue\n        text = path.read_text(errors=\"ignore\")\n        heading = next((l.lstrip(\"# \").strip() for l in text.splitlines() if l.startswith(\"#\")), path.stem)\n        buf = \"\"\n        for para in re.split(r\"\\n\\s*\\n\", text):\n            if buf and len(buf) + len(para) > max_chars:\n                chunks.append({\"source\": str(path), \"title\": heading, \"text\": buf.strip()})\n                buf = \"\"\n            buf += para + \"\\n\\n\"\n        if buf.strip():\n            chunks.append({\"source\": str(path), \"title\": heading, \"text\": buf.strip()})\n    return chunks\n\n\ndef tokenize(text: str) -> list[str]:\n    return re.findall(r\"[a-z0-9]+\", text.lower())\n```\n\nWhy chunks? A model answers better from five relevant paragraphs than from fifty pages, and it's cheaper. Each chunk keeps its `source` (the file path) and `title` (the file's first heading), which is what the citations will point to later.\n\n### Step 2: Search with BM25\n\nAdd a small search index:\n\n```python\nclass Index:\n    \"\"\"Keyword search over chunks with BM25: fast, free, and no embeddings needed.\"\"\"\n\n    def __init__(self, chunks: list[dict]):\n        self.chunks = chunks\n        self.tokens = [tokenize(c[\"text\"]) for c in chunks]\n        self.bm25 = BM25Plus(self.tokens)  # the \"Plus\" variant still works when you only have a few files\n\n    def search(self, query: str, k: int = 5) -> list[dict]:\n        words = set(tokenize(query))\n        scores = self.bm25.get_scores(list(words))\n        best = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)\n        return [self.chunks[i] for i in best if words & set(self.tokens[i])][:k]\n```\n\nBM25 is the ranking method behind most traditional search engines: it scores chunks by how many of your query's words they contain, giving more weight to rare words. It's not as clever as embedding-based \"semantic\" search, but it's free, instant, easy to debug, and very good for documents full of specific terms like policy names and product codes.\n\nOne lesson from testing this: the standard BM25 variant gives *zero* weight to a word that appears in half your documents, so with only two or three files it can find nothing at all. The `BM25Plus` variant fixes that, and we only keep chunks that share at least one word with the question.\n\n**Check before moving on:** in a Python shell, run `import askdocs; idx = askdocs.Index(askdocs.load_chunks(\"docs\")); [h[\"title\"] for h in idx.search(\"your question\")]`. You should see the titles of the files you'd expect.\n\n## Sunday: answers with receipts\n\n### Step 3: Ask Claude, with citations\n\nNow the part that makes this trustworthy:\n\n```python\ndef as_search_results(hits: list[dict]) -> list[dict]:\n    \"\"\"Hand the retrieved chunks to Claude as search results, so it can cite them.\"\"\"\n    return [{\"type\": \"search_result\", \"source\": h[\"source\"], \"title\": h[\"title\"],\n             \"content\": [{\"type\": \"text\", \"text\": h[\"text\"]}], \"citations\": {\"enabled\": True}}\n            for h in hits]\n\n\ndef ask(index: Index, question: str, history: list[dict]) -> tuple[str, list[str]]:\n    hits = index.search(question + \" \" + (history[-2][\"content\"] if len(history) >= 2 else \"\"))\n    if not hits:\n        return \"I couldn't find anything about that in your documents.\", []\n    messages = history + [{\"role\": \"user\", \"content\": as_search_results(hits) + [{\"type\": \"text\", \"text\": question}]}]\n    response = client.messages.create(model=MODEL, max_tokens=4000, system=SYSTEM, messages=messages,\n                                      thinking={\"type\": \"adaptive\"}, output_config={\"effort\": \"low\"})\n    if response.stop_reason == \"refusal\":\n        return \"Claude declined to answer that.\", []\n    sources, parts = [], []\n    for block in response.content:\n        if block.type != \"text\":\n            continue\n        marks = \"\"\n        for c in block.citations or []:\n            if c.type == \"search_result_location\":\n                if c.source not in sources:\n                    sources.append(c.source)\n                n = sources.index(c.source) + 1\n                if f\"[{n}]\" not in marks:\n                    marks += f\"[{n}]\"\n        parts.append(block.text + marks)\n    return \"\".join(parts).strip(), sources\n```\n\nThe key move is `as_search_results`. Instead of pasting passages into a big prompt, we send them as [search result blocks](https://platform.claude.com/docs/en/build-with-claude/search-results), the same format Claude uses for web search. That lets Claude attach precise citations to its answer, each carrying the `source` and `title` you supplied. One rule to know: citations are all-or-nothing, so enable them on every result or none.\n\nThe system prompt does the rest: answer only from the documents, and say plainly when they don't contain the answer. That \"I don't know\" is a feature. A chatbot that confidently invents your leave policy is worse than no chatbot.\n\n### Step 4: Make it a conversation\n\nFinally, a simple chat loop:\n\n```python\ndef chat(folder: str) -> None:\n    index = Index(load_chunks(folder))\n    print(f\"Indexed {len(index.chunks)} chunks from {folder}. Ask away (empty line to quit).\")\n    history: list[dict] = []\n    while question := input(\"\\nYou: \").strip():\n        answer, sources = ask(index, question, history)\n        print(f\"\\nAskDocs: {answer}\")\n        for n, s in enumerate(sources, 1):\n            print(f\"  [{n}] {s}\")\n        history += [{\"role\": \"user\", \"content\": question}, {\"role\": \"assistant\", \"content\": answer}]\n        history = history[-8:]  # keep the last four exchanges for follow-up questions\n\n\nif __name__ == \"__main__\":\n    chat(sys.argv[1] if len(sys.argv) > 1 else \"docs\")\n```\n\nWe keep the last four exchanges so follow-ups like \"and what about contractors?\" make sense, and we add the previous question to the search so the right passages come back. Then run it:\n\n```bash\npython askdocs.py path/to/your/docs\n```\n\n[[VISUAL:v4]]\n\n## Common pitfalls\n\n- **Chunks that are too big or too small.** Too big and you waste tokens; too small and passages lose context. Paragraph-sized chunks of up to 900 characters are a good start.\n- **Keyword mismatch.** BM25 won't match \"vacation\" to \"leave\". If people ask questions in different words than your documents use, add synonyms to your files, or upgrade the search (below).\n- **Letting the model fill gaps.** Keep the \"only from the documents\" instruction, and test it with a question you know isn't covered.\n- **Stale indexes.** The index is rebuilt every time you start AskDocs, which is fine for small folders. For large ones, save it to disk.\n- **Sensitive files.** Anything in the folder can end up in an answer. Point it only at documents everyone using it is allowed to read.\n\n## Take it further\n\n- **Semantic search.** Swap BM25 for embeddings to match meaning, not just words, or combine both and merge the results.\n- **PDFs and Word files.** Add a converter step so the folder can hold any format.\n- **A team version.** Put it behind a Slack command so anyone can ask.\n- **Measure it.** Write ten questions with known answers and check AskDocs gets them right after every change. (That's the next Weekend Build.)\n\n## Resources\n\n- [Search result content blocks](https://platform.claude.com/docs/en/build-with-claude/search-results)\n- [rank_bm25 on GitHub](https://github.com/dorianbrown/rank_bm25)\n- [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)\n- [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)\n\nHappy building, and tell me what you pointed it at. Swagata\n",
+  "visuals": [
+    {
+      "id": "v1",
+      "kind": "photo",
+      "caption": "Every team has a pile of documents nobody can search.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": null,
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": "office binders shelves documents"
+    },
+    {
+      "id": "v2",
+      "kind": "diagram",
+      "caption": "Search happens on your machine; Claude only sees the five passages that matter.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "How AskDocs answers a question",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": [
+        {
+          "id": "docs",
+          "label": "Your files"
+        },
+        {
+          "id": "q",
+          "label": "Your question"
+        },
+        {
+          "id": "chunks",
+          "label": "Chunks + BM25 index"
+        },
+        {
+          "id": "top",
+          "label": "Top 5 passages"
+        },
+        {
+          "id": "claude",
+          "label": "Claude (search results)"
+        },
+        {
+          "id": "ans",
+          "label": "Answer with [1] [2]"
+        }
+      ],
+      "edges": [
+        {
+          "source": "docs",
+          "target": "chunks",
+          "label": "split"
+        },
+        {
+          "source": "q",
+          "target": "chunks",
+          "label": "search"
+        },
+        {
+          "source": "chunks",
+          "target": "top",
+          "label": ""
+        },
+        {
+          "source": "top",
+          "target": "claude",
+          "label": "cite-able"
+        },
+        {
+          "source": "claude",
+          "target": "ans",
+          "label": ""
+        }
+      ],
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v3",
+      "kind": "stat",
+      "caption": "Search is free and local; each answer is a single small API call.",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "source_name": "Claude pricing",
+      "chart_type": null,
+      "chart_title": "What AskDocs costs to run",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": [
+        {
+          "value": "$0",
+          "label": "for search: BM25 runs on your own machine"
+        },
+        {
+          "value": "$2",
+          "label": "per million input tokens on Claude Sonnet 5.5"
+        },
+        {
+          "value": "5",
+          "label": "passages sent with each question"
+        }
+      ],
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": null,
+      "photo_query": null
+    },
+    {
+      "id": "v4",
+      "kind": "timeline",
+      "caption": "A working document assistant by Sunday night.",
+      "source_url": "",
+      "source_name": "",
+      "chart_type": null,
+      "chart_title": "Your weekend plan",
+      "y_label": null,
+      "unit": null,
+      "categories": null,
+      "series": null,
+      "highlight": null,
+      "annotation": null,
+      "nodes": null,
+      "edges": null,
+      "stats": null,
+      "waffle_value": null,
+      "waffle_label": null,
+      "quote_text": null,
+      "quote_author": null,
+      "timeline": [
+        {
+          "when": "Sat AM",
+          "title": "Split your documents into chunks",
+          "detail": "Each chunk remembers its file and heading."
+        },
+        {
+          "when": "Sat PM",
+          "title": "Build the BM25 search index",
+          "detail": "Find the five most relevant passages for any question."
+        },
+        {
+          "when": "Sun AM",
+          "title": "Answer with citations",
+          "detail": "Send passages as search results; turn citations into footnotes."
+        },
+        {
+          "when": "Sun PM",
+          "title": "Make it a conversation",
+          "detail": "A chat loop with memory for follow-up questions."
+        }
+      ],
+      "photo_query": null
+    }
+  ]
+}
