@@ -44,3 +44,17 @@ GitHub Action finds it and posts it to Substack as a draft (re-rendering first, 
 - Network access: Full (to read papers and docs, and to fetch article preview images).
 - Photos: nothing required (Openverse needs no key). Optional `PIXABAY_API_KEY` environment variable
   for stock photos (free at https://pixabay.com/api/docs/).
+
+## Batch 2 (done)
+
+| Date | Day | Category | Topic |
+|---|---|---|---|
+| 2026-12-15 | Tue | AI and the Mind | Sycophancy: AI that always agrees |
+| 2026-12-17 | Thu | Weekend Build | Build a coding agent from scratch |
+| 2026-12-22 | Tue | AI and the Mind | Growing up with AI: kids' development |
+| 2026-12-29 | Tue | AI and the Mind | Grief tech and digital ghosts |
+| 2027-01-05 | Tue | AI and the Mind | AI relationships and love |
+
+Note: Thursdays Dec 24 and Dec 31 have no pre-written Weekend Build; the scheduled run will generate
+one automatically from the topic backlog (or skip those weeks by disabling the workflow).
+
