@@ -12,6 +12,7 @@ Generated automatically. Status: `local` = saved here only, `draft` = Substack d
 
 | Date | Title | Status |
 |---|---|---|
+| 2026-12-08 | [Can a chatbot be your therapist? What the trials say](ai-and-the-mind/2026-12-08-can-a-chatbot-be-your-therapist-what-the-trials-say/issue.md) | local |
 | 2026-12-01 | [We say we don't trust AI. Then we stop checking its work](ai-and-the-mind/2026-12-01-we-say-we-don-t-trust-ai-then-we-stop-checking-its-work/issue.md) | local |
 | 2026-11-24 | [Worried AI will take your job? The worry itself has a cost](ai-and-the-mind/2026-11-24-worried-ai-will-take-your-job-the-worry-itself-has-a-cost/issue.md) | local |
 | 2026-11-17 | [Is AI making us worse at thinking? What the evidence says](ai-and-the-mind/2026-11-17-is-ai-making-us-worse-at-thinking-what-the-evidence-says/issue.md) | local |

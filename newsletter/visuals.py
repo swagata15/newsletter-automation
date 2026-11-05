@@ -289,7 +289,11 @@ def render_chart(v: Visual, path: Path, t: Theme) -> Path:
         elif kind == "line":
             _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.2, rad=0.3 * side)
         else:
-            _pen_note(ax, t, v.annotation, target, dx=side * 0.24, dy=0.3, rad=0.3 * side)
+            tallest = max(x for ser in series for x in ser.values)
+            top_frac = ax.transAxes.inverted().transform(ax.transData.transform((0, tallest)))[1]
+            _, ty = ax.transAxes.inverted().transform(ax.transData.transform(target))
+            _pen_note(ax, t, v.annotation, target, rad=0.3 * side,
+                      text_pos=(min(max(tx + side * 0.24, 0.14), 0.86), min(max(ty + 0.3, top_frac + 0.16), 0.93)))
 
     _source_line(fig, t, v.source_name, v.source_url)
     return _save(fig, path)

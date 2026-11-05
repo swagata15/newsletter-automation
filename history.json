@@ -54,5 +54,13 @@
     "topic": "Do people trust AI more than humans? The psychology of algorithm appreciation and aversion",
     "folder": "issues/ai-and-the-mind/2026-12-01-we-say-we-don-t-trust-ai-then-we-stop-checking-its-work",
     "status": "local"
+  },
+  {
+    "date": "2026-12-08",
+    "type": "psychology",
+    "title": "Can a chatbot be your therapist? What the trials say",
+    "topic": "AI therapy chatbots: does the evidence support them?",
+    "folder": "issues/ai-and-the-mind/2026-12-08-can-a-chatbot-be-your-therapist-what-the-trials-say",
+    "status": "local"
   }
 ]
