@@ -115,6 +115,11 @@ def main() -> None:
             publish_issue(built, mode=args.mode, tags=config["issues"][kind].get("tags"))
             record_history(built, "published" if args.mode == "publish" else "draft", config)
             return
+    if args.type == "auto" and not os.getenv("ANTHROPIC_API_KEY"):
+        # No pre-written issue for today and no Claude key to write one: skip quietly instead of failing.
+        logging.info("No pre-written issue for today and no ANTHROPIC_API_KEY set, so nothing to post. "
+                     "Add the key to have Friday roundups and empty days written automatically.")
+        return
     kinds = list(KINDS) if args.type == "all" else [kind_for_today(config) if args.type == "auto" else args.type]
 
     jobs = []
