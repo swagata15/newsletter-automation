@@ -68,7 +68,7 @@ jobs:
           PUBLISH_MODE: ${{ inputs.mode || vars.PUBLISH_MODE || 'draft' }}
         run: python -m newsletter
       - name: Save issues to the repo (issues/<category>/...) and record topics
-        if: always()
+        if: success()
         run: |
           git config user.name "newsletter-bot"
           git config user.email "newsletter-bot@users.noreply.github.com"
