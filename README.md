@@ -54,7 +54,7 @@ Repo **Settings → Secrets and variables → Actions**, add these secrets:
 | Secret | Value |
 |---|---|
 | `ANTHROPIC_API_KEY` | your Claude API key |
-| `SUBSTACK_PUBLICATION_URL` | `https://yourname.substack.com` |
+| `SUBSTACK_PUBLICATION_URL` | optional: defaults to `https://swagataashwani.substack.com` |
 | `SUBSTACK_COOKIES` | `substack.sid=...` |
 | `PIXABAY_API_KEY` | optional, stock photos ([free key](https://pixabay.com/api/docs/)); without any photo key, Creative Commons photos come from Openverse with no key |
 

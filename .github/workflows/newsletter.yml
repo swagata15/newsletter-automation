@@ -53,7 +53,7 @@ jobs:
       - name: Research, write and post to Substack
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SUBSTACK_PUBLICATION_URL: ${{ secrets.SUBSTACK_PUBLICATION_URL }}
+          SUBSTACK_PUBLICATION_URL: ${{ secrets.SUBSTACK_PUBLICATION_URL || 'https://swagataashwani.substack.com' }}
           SUBSTACK_COOKIES: ${{ secrets.SUBSTACK_COOKIES }}
           SUBSTACK_EMAIL: ${{ secrets.SUBSTACK_EMAIL }}
           SUBSTACK_PASSWORD: ${{ secrets.SUBSTACK_PASSWORD }}
