@@ -19,6 +19,13 @@ on:
       topic:
         description: "Optional topic override (psychology / tutorial)"
         required: false
+      upload_drafts:
+        description: "Upload all pre-written issues to Substack as drafts (ignores the options above)"
+        type: boolean
+        default: false
+      upload_limit:
+        description: "With upload: how many (0 = all). Try 1 first."
+        default: "1"
       mode:
         description: "draft = review in Substack first, publish = send to subscribers"
         type: choice
@@ -56,6 +63,8 @@ jobs:
           ISSUE_TYPE: ${{ inputs.type || 'auto' }}
           ISSUE_TOPIC: ${{ inputs.topic }}
           ISSUE_COUNT: ${{ inputs.count || '1' }}
+          UPLOAD_DRAFTS: ${{ inputs.upload_drafts && 'true' || 'false' }}
+          UPLOAD_LIMIT: ${{ inputs.upload_limit || '0' }}
           PUBLISH_MODE: ${{ inputs.mode || vars.PUBLISH_MODE || 'draft' }}
         run: python -m newsletter
       - name: Save issues to the repo (issues/<category>/...) and record topics

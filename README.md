@@ -60,6 +60,10 @@ Repo **Settings → Secrets and variables → Actions**, add these secrets:
 
 Optional: a `PUBLISH_MODE` variable set to `publish` to skip the draft review.
 
+**Upload the pre-written issues:** Actions → AI newsletter → Run workflow → tick **Upload all pre-written
+issues** (set the limit to 1 for a first test). Each becomes a Substack draft with its images; schedule or
+publish them from Substack's editor. Scheduled runs skip any day whose issue is already on Substack.
+
 Test it: **Actions → AI newsletter → Run workflow**, pick a type. After that it runs on schedule.
 For a bulk batch, pick `all` (or one category) and set **count**; each issue becomes a Substack draft
 and is committed under `issues/`.

@@ -7,6 +7,7 @@
     python -m newsletter --type all --count 2 --dry-run   # bulk: 2 per category, saved locally only
     python -m newsletter --render issues/ai-and-the-mind/2026-11-10-*   # re-draw visuals (e.g. add photos)
     python -m newsletter --from-json draft.json --notes notes.md --type psychology --date 2026-11-10
+    python -m newsletter --upload-drafts                 # every pre-written issue -> Substack draft, oldest first
 
 On a scheduled day, if a pre-written issue exists for that day (status "local"), it is posted
 instead of generating a new one.
@@ -28,8 +29,8 @@ from dotenv import load_dotenv
 from datetime import date, datetime, timezone
 
 from .models import Issue
-from .pipeline import (KINDS, assemble, build, kind_for_today, premade_for, record_history, rerender,
-                       write_index)
+from .pipeline import (KINDS, assemble, build, kind_for_today, load_history, premade_for, record_history,
+                       rerender, write_index)
 
 
 def main() -> None:
@@ -51,6 +52,10 @@ def main() -> None:
     p.add_argument("--notes", metavar="FILE", help="Research notes for --from-json (used to fact-check visuals).")
     p.add_argument("--date", help="Issue date YYYY-MM-DD for --from-json (folder name and cover).")
     p.add_argument("--photos", metavar="FILE", help="photos.json with hand-picked photos for --from-json.")
+    p.add_argument("--upload-drafts", action="store_true", default=os.getenv("UPLOAD_DRAFTS") == "true",
+                   help="Upload every pre-written issue (status 'local') to Substack as a draft, then exit.")
+    p.add_argument("--limit", type=int, default=int(os.getenv("UPLOAD_LIMIT") or 0),
+                   help="With --upload-drafts: only the next N issues (0 = all). Try 1 first.")
     args = p.parse_args()
 
     config = yaml.safe_load(Path(args.config).read_text())
@@ -79,8 +84,29 @@ def main() -> None:
         logging.info("Saved %s (%s)", built.out_dir, status)
         return
 
+    if args.upload_drafts:
+        from .publish import publish_issue
+        pending = sorted((h for h in load_history() if h.get("status") == "local" and h.get("folder")),
+                         key=lambda h: h["date"])
+        if args.limit:
+            pending = pending[:args.limit]
+        logging.info("Uploading %d pre-written issue(s) to Substack as drafts.", len(pending))
+        for h in pending:
+            built = rerender(Path(h["folder"]), config)
+            publish_issue(built, mode="draft", tags=config["issues"][h["type"]].get("tags"))
+            record_history(built, "draft", config)
+            logging.info("  draft created: %s  %s", h["date"], built.issue.title)
+        write_index(config)
+        return
+
     if args.type == "auto" and not args.dry_run:
         kind = kind_for_today(config)
+        today = datetime.now(timezone.utc).date().isoformat()
+        done_today = [h for h in load_history() if h["type"] == kind and h["date"] == today
+                      and h.get("status") in ("draft", "published")]
+        if done_today:  # already uploaded early (e.g. with --upload-drafts): don't generate a duplicate
+            logging.info("Today's %s issue is already on Substack (%s): nothing to do.", kind, done_today[0]["title"])
+            return
         folder = premade_for(kind, datetime.now(timezone.utc).date())
         if folder:
             logging.info("Posting the pre-written issue scheduled for today: %s", folder)
