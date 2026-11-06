@@ -1,0 +1,168 @@
+<title>Substack Paste Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@500&display=swap">
+<style>
+/* Layout: issue list on the left, the selected issue's copy steps on the right; one column on phones.
+   Palette follows the newsletter's own brand kit (newsprint, ink, series colours, highlighter). */
+:root {
+  --paper: #F4EFE6; --card: #FBF8F2; --ink: #161616; --graphite: #6A645B; --rule: #D9D0C1;
+  --hl: #F5D547; --navy: #1B3A5C; --plum: #6A3B5A; --forest: #2E5E4E; --ok: #2E5E4E; --btn-ink: #FFFFFF;
+  --display: "Roboto Slab", Georgia, serif; --body: "Roboto", system-ui, sans-serif; --mono: "Roboto Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #1A1816; --card: #23201D; --ink: #EFE9DE; --graphite: #A39A8C; --rule: #3A352F;
+  --hl: #E2C23A; --navy: #7FA6CF; --plum: #C48DB0; --forest: #79B39E; --ok: #79B39E; --btn-ink: #161616; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #1A1816; --card: #23201D; --ink: #EFE9DE; --graphite: #A39A8C; --rule: #3A352F;
+  --hl: #E2C23A; --navy: #7FA6CF; --plum: #C48DB0; --forest: #79B39E; --ok: #79B39E; --btn-ink: #161616; color-scheme: dark }
+body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header h1 { font: 700 clamp(24px, 4vw, 34px)/1.15 var(--display); margin: 0; text-wrap: balance; }
+header p { color: var(--graphite); margin: 6px 0 0; max-width: 70ch; }
+.steps { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 18px 0 26px; padding: 0; list-style: none; counter-reset: s; }
+.steps li { counter-increment: s; display: flex; gap: 8px; align-items: baseline; color: var(--graphite); font-size: 14px; }
+.steps li::before { content: counter(s); font: 500 12px var(--mono); color: var(--ink); background: var(--hl); padding: 1px 7px; }
+.grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+nav { border-top: 2px solid var(--ink); }
+nav button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 2px 10px;
+  padding: 10px 8px; border-bottom: 1px solid var(--rule); }
+nav button:hover { background: var(--card); }
+nav button:focus-visible { outline: 2px solid var(--navy); outline-offset: -2px; }
+nav button[aria-current="true"] { background: var(--card); box-shadow: inset 4px 0 0 var(--cat); }
+.d { font: 500 12px var(--mono); color: var(--graphite); grid-row: span 2; padding-top: 2px; font-variant-numeric: tabular-nums; }
+.t { font-weight: 500; line-height: 1.3; min-width: 0; }
+.k { font: 700 11px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--cat); display: flex; gap: 8px; align-items: center; }
+.done-badge { color: var(--ok); letter-spacing: 0; text-transform: none; font-weight: 500; }
+main { min-width: 0; }
+.panel { background: var(--card); border: 1px solid var(--rule); padding: clamp(16px, 3vw, 28px); }
+.tab { display: inline-block; font: 700 11px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--btn-ink); background: var(--cat); padding: 3px 8px; }
+.when { font: 500 13px var(--mono); color: var(--graphite); margin-left: 10px; }
+.field { margin-top: 18px; display: grid; gap: 6px; }
+.field label { font: 700 11px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--graphite); }
+.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.val { flex: 1 1 280px; min-width: 0; padding: 9px 12px; border: 1px solid var(--rule); background: var(--paper); }
+.val.title { font: 700 20px/1.3 var(--display); }
+button.copy { font: 500 14px var(--body); cursor: pointer; border: 1px solid var(--ink); background: transparent; color: var(--ink); padding: 9px 14px; white-space: nowrap; }
+button.copy.primary { background: var(--ink); color: var(--paper); font-weight: 700; padding: 12px 18px; }
+button.copy:focus-visible, .mark:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+button.copy.ok { border-color: var(--ok); color: var(--ok); background: transparent; }
+.bodybar { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; border-top: 1px solid var(--rule); padding-top: 18px; }
+.meta { color: var(--graphite); font-size: 13px; }
+.mark { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.hint { font-size: 13px; color: var(--graphite); margin: 8px 0 0; }
+.preview { margin-top: 18px; max-height: 70vh; overflow: auto; border: 1px solid var(--rule); background: var(--paper); padding: 4px clamp(14px, 3vw, 28px); }
+.preview :is(h2, h3) { font-family: var(--display); line-height: 1.25; text-wrap: balance; }
+.preview p, .preview li { max-width: 68ch; }
+.preview a { color: var(--navy); }
+.preview pre { overflow-x: auto; background: var(--card); padding: 12px; font: 13px/1.5 var(--mono); }
+.preview code { font-family: var(--mono); font-size: .92em; }
+.preview blockquote { margin: 0; padding-left: 14px; border-left: 3px solid var(--rule); color: var(--graphite); }
+.ph { display: flex; flex-direction: column; gap: 2px; border: 1px dashed var(--graphite); padding: 10px 12px; margin: 14px 0; font-size: 13px; color: var(--graphite); }
+.ph-k { font: 500 11px var(--mono); color: var(--ink); background: var(--hl); align-self: flex-start; padding: 0 6px; }
+#clip { position: absolute; left: -99999px; top: 0; width: 600px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--paper); padding: 10px 16px; font-size: 14px; }
+@media (prefers-reduced-motion: no-preference) { button.copy { transition: background .15s, color .15s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Substack Paste Desk</h1>
+    <p>All 16 pre-written issues, ready to paste into swagataashwani.substack.com. Copy each part, paste it into a new Substack post, then schedule it for its date.</p>
+  </header>
+  <ol class="steps">
+    <li>In Substack, click <b>Create new → Article</b></li>
+    <li>Copy the title, then the subtitle, into their boxes</li>
+    <li>Click <b>Copy post body</b>, click in the post body, press <b>Cmd + V</b></li>
+    <li>Check the images loaded, then <b>Continue → Schedule</b> for the date shown</li>
+  </ol>
+  <div class="grid">
+    <nav id="list" aria-label="Issues"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+<div id="clip" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+const ISSUES = __DATA__;
+const COLORS = { weekly: "var(--navy)", psychology: "var(--plum)", tutorial: "var(--forest)" };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+let done = store.get("pasted") || {};
+const fmt = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2600); }
+
+async function copyHTML(html, plain) {
+  try {
+    if (window.ClipboardItem && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([plain], { type: "text/plain" }) })]);
+      return true;
+    }
+  } catch (e) {}
+  const clip = document.getElementById("clip"); clip.innerHTML = html;
+  const r = document.createRange(); r.selectNodeContents(clip);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  let ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+  sel.removeAllRanges(); clip.innerHTML = ""; return ok;
+}
+async function copyText(text, el) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  if (el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    try { return document.execCommand("copy"); } catch (e) {} }
+  return false;
+}
+function flash(btn, ok, okText) { const old = btn.dataset.label || btn.textContent; btn.dataset.label = old;
+  btn.textContent = ok ? okText : "Select and press Cmd + C"; btn.classList.toggle("ok", ok);
+  setTimeout(() => { btn.textContent = old; btn.classList.remove("ok"); }, 2200); }
+
+function renderList(cur) {
+  document.getElementById("list").innerHTML = ISSUES.map((it, i) => `
+    <button type="button" data-i="${i}" aria-current="${i === cur}" style="--cat:${COLORS[it.type]}">
+      <span class="d">${it.date.slice(5).replace("-", "/")}<br>${it.date.slice(0, 4)}</span>
+      <span class="k">${it.label}${done[it.date + it.type] ? '<span class="done-badge">✓ pasted</span>' : ""}</span>
+      <span class="t">${esc(it.title)}</span>
+    </button>`).join("");
+}
+function show(i) {
+  const it = ISSUES[i];
+  renderList(i);
+  const m = document.getElementById("main");
+  m.style.setProperty("--cat", COLORS[it.type]);
+  m.innerHTML = `
+    <div class="panel">
+      <span class="tab">${it.label}</span><span class="when">Schedule for ${fmt(it.date)}</span>
+      <div class="field"><label for="tt">Title</label>
+        <div class="row"><div class="val title" id="tt">${esc(it.title)}</div><button class="copy" id="ct" type="button">Copy title</button></div></div>
+      <div class="field"><label for="st">Subtitle</label>
+        <div class="row"><div class="val" id="st">${esc(it.subtitle)}</div><button class="copy" id="cs" type="button">Copy subtitle</button></div></div>
+      <div class="bodybar">
+        <button class="copy primary" id="cb" type="button">Copy post body</button>
+        <span class="meta">${it.words.toLocaleString()} words · ${it.images} images</span>
+        <label class="mark"><input type="checkbox" id="dn" ${done[it.date + it.type] ? "checked" : ""}> Pasted into Substack</label>
+      </div>
+      <p class="hint">Images arrive in Substack from your GitHub repo. If any show as broken after pasting, wait a few seconds; Substack copies them over.</p>
+      <div class="preview" aria-label="Preview of the post body">${it.preview}</div>
+    </div>`;
+  document.getElementById("ct").onclick = async e => flash(e.target, await copyText(it.title, document.getElementById("tt")), "Title copied");
+  document.getElementById("cs").onclick = async e => flash(e.target, await copyText(it.subtitle, document.getElementById("st")), "Subtitle copied");
+  document.getElementById("cb").onclick = async e => {
+    const plain = it.copy.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    const ok = await copyHTML(it.copy, plain); flash(e.target, ok, "Body copied");
+    toast(ok ? "Copied. Click in the Substack post body and press Cmd + V." : "Copy was blocked. Try again, or use another browser.");
+  };
+  document.getElementById("dn").onchange = e => { done[it.date + it.type] = e.target.checked; store.set("pasted", done); renderList(i); };
+  if (location.hash !== "#" + it.date + "-" + it.type) history.replaceState(null, "", "#" + it.date + "-" + it.type);
+}
+document.getElementById("list").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) show(+b.dataset.i); });
+function fromHash() { const h = location.hash.slice(1); const i = ISSUES.findIndex(it => it.date + "-" + it.type === h);
+  if (i >= 0) return i; const next = ISSUES.findIndex(it => !done[it.date + it.type]); return next >= 0 ? next : 0; }
+window.addEventListener("hashchange", () => show(fromHash()));
+show(fromHash());
+</script>
